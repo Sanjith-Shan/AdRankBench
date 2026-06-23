@@ -2,6 +2,10 @@
 
 ### CTR Prediction Evaluation Framework for Ad Ranking Models
 
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c.svg)
+
 AdRankBench trains and evaluates five click through rate prediction architectures (Logistic Regression, FM, DeepFM, DCN, DNN) on the Criteo Display Advertising Challenge dataset. The framework implements production grade feature engineering with log transforms, hash encoding, frequency encoding, and explicit feature crosses. All models are evaluated with AUC, logloss, normalized entropy, group AUC, and calibration analysis using temporal train and test splits to prevent data leakage.
 
 The project is built around the core problems of ad ranking systems. It covers ranking and retrieval, query understanding and relevance through a two tower DSSM model, probability calibration for ad pricing, and budget pacing through a feedback controller simulator. Each piece maps to a concrete skill that ad ranking and search ads teams care about.

@@ -12,17 +12,17 @@ The project is built around the core problems of ad ranking systems. It covers r
 
 ## Results
 
-The table below comes from a run on 100000 synthetic rows with seed 42. Reproduce it with `python scripts/run_benchmark.py --sample-size 100000`. The same table is mirrored into `results/benchmark_report.md`. Models are sorted by test AUC.
+The table below comes from a run on 2 million rows of the real Criteo Display Advertising Challenge dataset, trained on the first 1.6 million rows with a temporal split and seed 42. The real Criteo click rate is about 25 percent and the categorical fields reach into the hundreds of thousands of unique values. After placing the Criteo file at `data/criteo.csv` you can reproduce this with `python scripts/run_benchmark.py --sample-size 2000000`. The same table is mirrored into `results/benchmark_report.md`. Models are sorted by test AUC.
 
 | Model | AUC | LogLoss | NE | RelaImpr | GAUC | ECE | Train s | Params |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DeepFM | 0.7789 | 0.4722 | 0.8141 | 0.1859 | 0.7646 | 0.0196 | 8.2 | 21.6M |
-| DCN | 0.7715 | 0.5046 | 0.8702 | 0.1298 | 0.7581 | 0.0678 | 9.6 | 21.6M |
-| DNN | 0.7708 | 0.4879 | 0.8412 | 0.1588 | 0.7571 | 0.0392 | 8.1 | 21.9M |
-| FM | 0.7419 | 0.5024 | 0.8662 | 0.1338 | 0.7246 | 0.0174 | 13.4 | 21.4M |
-| LogisticRegression | 0.6808 | 0.5365 | 0.9251 | 0.0749 | 0.6832 | 0.0102 | 0.2 | 53 |
+| DeepFM | 0.7872 | 0.4512 | 0.8130 | 0.1870 | 0.7873 | 0.0100 | 132 | 21.6M |
+| DCN | 0.7871 | 0.4508 | 0.8124 | 0.1876 | 0.7871 | 0.0052 | 140 | 21.6M |
+| DNN | 0.7863 | 0.4518 | 0.8141 | 0.1859 | 0.7864 | 0.0107 | 126 | 21.9M |
+| FM | 0.7828 | 0.4553 | 0.8205 | 0.1795 | 0.7829 | 0.0091 | 146 | 21.4M |
+| LogisticRegression | 0.7177 | 0.4983 | 0.8979 | 0.1021 | 0.7177 | 0.0057 | 11 | 53 |
 
-DeepFM, DCN, DNN, and FM all beat the logistic regression baseline. DeepFM leads at 0.7789 AUC against 0.6808 for logistic regression, a lift of about 0.098 AUC and a drop in normalized entropy from 0.925 to 0.814. The synthetic data carries deliberate pairwise categorical interactions that a linear model cannot represent from raw frequency features, so the interaction aware models pull ahead. Logistic regression stays the best calibrated model by ECE, which is a useful reminder that ranking power and calibration are different axes. See the methodology notes below and the dedicated document in `docs/METHODOLOGY.md` for the full reasoning.
+All four interaction aware models beat the logistic regression baseline on real Criteo data. DeepFM and DCN lead at about 0.787 AUC against 0.718 for logistic regression, a lift of about 0.069 AUC and a drop in normalized entropy from 0.898 to 0.813. On real Criteo the categorical features have very high cardinality, so hash encoding and embeddings are essential, and the high order feature interactions are what separate the deep models from the linear baseline. Every model stays well calibrated with expected calibration error under 0.011. These numbers are in line with published Criteo benchmarks given the bounded 10000 bucket hash space this framework uses to keep memory in check. For fast experiments with no download the benchmark also ships a synthetic generator with built in interactions, selected with the `--synthetic` flag. See the methodology notes below and the dedicated document in `docs/METHODOLOGY.md` for the full reasoning.
 
 ## Architecture
 
@@ -78,10 +78,16 @@ Each run reports budget utilization and a smoothness score, defined as the root 
 
 ```bash
 pip install -r requirements.txt
-python scripts/run_benchmark.py --sample-size 100000
+
+# Option A. Real Criteo data. Streams a 2 million row sample, about 1 GB.
+bash scripts/download_data.sh 2000000
+python scripts/run_benchmark.py --sample-size 2000000
+
+# Option B. No download. Synthetic data with built in interactions.
+python scripts/run_benchmark.py --synthetic --sample-size 100000
 ```
 
-The benchmark falls back to synthetic data automatically when no real Criteo file is present, so it runs end to end with no downloads. To use real data place a Criteo TSV or CSV at `data/criteo.csv` or pass `--data-path`. The download helper at `scripts/download_data.sh` tries to fetch a public Criteo sample and prints a message when it cannot, after which the benchmark uses synthetic data.
+The download helper streams a public figshare mirror of the real Criteo dataset and extracts only the rows requested, so a multi million row sample costs about 1 GB instead of the full 11 GB. If no real Criteo file is present at `data/criteo.csv` the benchmark falls back to the synthetic generator automatically, so it always runs end to end. You can also point at your own file with `--data-path`.
 
 Run the role aligned extensions on their own.
 

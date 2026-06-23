@@ -31,14 +31,15 @@ def load_raw(data_path: str, sample_size: Optional[int] = None) -> pd.DataFrame:
 
     The reader sniffs the delimiter. It tries tab first and falls back to comma.
     Columns are assigned the canonical schema ALL_COLS. When sample_size is given
-    the first sample_size rows are taken positionally because the data is time
-    ordered and a positional head preserves the temporal structure.
+    only the first sample_size rows are read from disk, because the data is time
+    ordered and a positional head preserves the temporal structure. Reading just
+    the head keeps memory bounded on the full multi gigabyte Criteo file.
 
     Numerical columns are coerced to numeric with bad values becoming NaN.
     Categorical columns are coerced to string and missing values become the
     literal token "__nan__".
     """
-    df = _read_with_delimiter(data_path)
+    df = _read_with_delimiter(data_path, nrows=sample_size)
 
     if df.shape[1] != len(ALL_COLS):
         raise ValueError(
@@ -67,15 +68,16 @@ def load_raw(data_path: str, sample_size: Optional[int] = None) -> pd.DataFrame:
     return df
 
 
-def _read_with_delimiter(data_path: str) -> pd.DataFrame:
+def _read_with_delimiter(data_path: str, nrows: Optional[int] = None) -> pd.DataFrame:
     """Read the file as tab separated first and fall back to comma separated.
 
     The fallback triggers when the tab read yields a single column which means
-    the real delimiter was not a tab.
+    the real delimiter was not a tab. When nrows is given only that many rows are
+    read from disk, which keeps memory bounded on very large files.
     """
-    df = pd.read_csv(data_path, sep="\t", header=None, dtype=str, na_values=[])
+    df = pd.read_csv(data_path, sep="\t", header=None, dtype=str, na_values=[], nrows=nrows)
     if df.shape[1] == 1:
-        df = pd.read_csv(data_path, sep=",", header=None, dtype=str, na_values=[])
+        df = pd.read_csv(data_path, sep=",", header=None, dtype=str, na_values=[], nrows=nrows)
     return df
 
 

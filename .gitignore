@@ -22,6 +22,8 @@ data/*.zip
 results/*.pt
 results/*.pth
 results/*.pkl
+results/*.onnx
+results/*.onnx.data
 
 # OS
 .DS_Store

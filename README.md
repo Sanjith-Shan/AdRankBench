@@ -24,6 +24,30 @@ The table below comes from a run on 2 million rows of the real Criteo Display Ad
 
 All four interaction aware models beat the logistic regression baseline on real Criteo data. DeepFM and DCN lead at about 0.787 AUC against 0.718 for logistic regression, a lift of about 0.069 AUC and a drop in normalized entropy from 0.898 to 0.813. On real Criteo the categorical features have very high cardinality, so hash encoding and embeddings are essential, and the high order feature interactions are what separate the deep models from the linear baseline. Every model stays well calibrated with expected calibration error under 0.011. These numbers are in line with published Criteo benchmarks given the bounded 10000 bucket hash space this framework uses to keep memory in check. For fast experiments with no download the benchmark also ships a synthetic generator with built in interactions, selected with the `--synthetic` flag. See the methodology notes below and the dedicated document in `docs/METHODOLOGY.md` for the full reasoning.
 
+## Inference Optimization
+
+A trained ranker is only useful if it can score live traffic inside a tight latency budget, so the model has to leave the training framework and run on an inference optimized runtime. This stage exports the trained DeepFM model once to ONNX and compares three serving backends on the exact same held out test rows. The script is `scripts/run_inference_benchmark.py` and it runs raw PyTorch eager mode, ONNX Runtime, and OpenVINO on the cpu so the hardware target is identical across all three.
+
+The table below comes from the test split of the default 100000 row sample, which is 10000 held out rows scored in batches of 1024 with seed 42. Latency is the mean wall time per batch, p99 is the tail latency, throughput is the steady state samples per second, and AUC is a correctness check. Because every backend runs the same weights on the same rows the AUC values match to four decimals, which confirms the export and the optimized runtimes preserve the model output rather than trading accuracy for speed. The 0.783 AUC here sits just under the 2 million row number in the Results table because this fast inference run trains on the smaller default sample, and the latency comparison itself does not depend on the training set size.
+
+| Backend | Latency (ms/batch) | p99 (ms) | Throughput (samples/s) | AUC |
+| --- | --- | --- | --- | --- |
+| PyTorch | 2.154 | 3.031 | 464293 | 0.7827 |
+| ONNX Runtime | 4.168 | 18.477 | 239909 | 0.7827 |
+| OpenVINO | 1.467 | 2.067 | 681526 | 0.7827 |
+
+![Inference latency by backend](results/inference_latency.png)
+
+ONNX Runtime and OpenVINO are inference optimization runtimes. They take an already trained graph and lower its serving latency by fusing operations, folding constants, and dispatching to tuned cpu kernels, all without touching the weights and without any retraining. OpenVINO is Intel's inference toolkit and it compiles the network for the host cpu, which is why it delivers the lowest and steadiest latency here, about 1.47 times faster per batch than eager PyTorch with a far lower p99 tail. ONNX Runtime is the open standard graph runtime and it also ships an OpenVINO execution provider. On this Apple Silicon machine its default cpu kernels did not beat eager PyTorch, but on the Intel x86 cpus that this kind of model is usually deployed on the ONNX Runtime MLAS kernels typically close or reverse that gap. The portable ONNX graph is also what lets the same trained model run later on OpenVINO, on a hardware accelerator, or behind a quantization pass with no change to the training code.
+
+Reproduce the table with one command.
+
+```bash
+python scripts/run_inference_benchmark.py
+```
+
+The script exports the ONNX graph itself, trains a DeepFM checkpoint on the spot when one is not already present in `results/`, and skips ONNX Runtime or OpenVINO gracefully with a short note when that package is missing, so it always runs end to end with whatever backends are installed. Pass `--sample-size` and `--batch-size` to change the workload.
+
 ## Architecture
 
 AdRankBench is a two stage pipeline. The first stage is feature engineering. Raw rows flow through a temporal split and then through a fit and transform feature pipeline that produces standardized numerical features, hash encoded categorical features, frequency encodings, and second order feature crosses. The second stage is model training and evaluation. The featurized splits are handed to each model, the trainer runs an early stopping loop, and the evaluation harness computes ranking and calibration metrics on the held out test split.
@@ -94,9 +118,10 @@ Run the role aligned extensions on their own.
 ```bash
 python scripts/run_relevance.py
 python scripts/run_pacing.py
+python scripts/run_inference_benchmark.py
 ```
 
-All three entry points seed everything with seed 42 for reproducibility.
+Every entry point seeds everything with seed 42 for reproducibility.
 
 ## Methodology Notes
 

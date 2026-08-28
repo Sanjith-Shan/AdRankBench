@@ -1,0 +1,115 @@
+{
+  "hardware": {
+    "collected_at_utc": "2026-08-28T06:35:53+00:00",
+    "host": {
+      "cpu_model": "AMD EPYC 7742 64-Core Processor",
+      "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+      "system": "Linux",
+      "machine": "x86_64",
+      "processor": "x86_64",
+      "logical_cores": 128
+    },
+    "python": {
+      "version": "3.12.3",
+      "implementation": "CPython",
+      "executable": "/usr/bin/python3"
+    },
+    "libraries": {
+      "numpy": "2.1.2",
+      "torch": {
+        "version": "2.8.0+cu128",
+        "cuda_build_version": "12.8",
+        "cudnn_version": "91002",
+        "cuda_available": true,
+        "mps_available": false,
+        "device_count": 1,
+        "device_names": [
+          "NVIDIA A100-SXM4-80GB"
+        ]
+      },
+      "onnxruntime": {
+        "version": "1.29.0",
+        "available_providers": [
+          "TensorrtExecutionProvider",
+          "CUDAExecutionProvider",
+          "CPUExecutionProvider"
+        ],
+        "device": "GPU"
+      },
+      "openvino": "not available",
+      "tensorrt": {
+        "version": "11.2.1.2",
+        "available": true,
+        "reason": ""
+      },
+      "pynvml": "not available"
+    },
+    "gpu": {
+      "source": "pynvml",
+      "index": 0,
+      "name": "NVIDIA A100-SXM4-80GB",
+      "driver_version": "580.159.04",
+      "cuda_driver_version": "13.0",
+      "total_memory_bytes": 85899345920,
+      "memory_bus_width_bits": 5120,
+      "max_memory_clock_mhz": 1593,
+      "max_sm_clock_mhz": 1410,
+      "compute_capability": "8.0",
+      "power_limit_watts": null,
+      "available": true,
+      "reason": "",
+      "peak_memory_bandwidth_gb_s": 2039.04
+    }
+  },
+  "tensorrt_available": true,
+  "reason": "",
+  "requested_models": [
+    "deepfm"
+  ],
+  "requested_precisions": [
+    "int8"
+  ],
+  "profile": {
+    "min_batch": 1,
+    "opt_batch": 256,
+    "max_batch": 4096
+  },
+  "onnx_graphs": {
+    "deepfm": "results/deepfm.onnx"
+  },
+  "engines": [
+    {
+      "model": "DeepFM",
+      "precision": "int8",
+      "engine_path": "results/trt/deepfm_int8_bs4096.engine",
+      "ok": true,
+      "message": "",
+      "build_seconds": 25.397769816219807,
+      "size_bytes": 106199788,
+      "min_batch": 1,
+      "opt_batch": 256,
+      "max_batch": 4096,
+      "onnx_path": "results/deepfm_int8.onnx",
+      "tensorrt_version": "11.2.1.2",
+      "platform_has_fast_fp16": null,
+      "platform_has_fast_int8": null,
+      "calibration": {
+        "cache_path": "results/trt/deepfm_int8_calibration.cache",
+        "cache_exists": false,
+        "cache_bytes": null,
+        "batches": 0,
+        "batch_size": 256,
+        "source_split": "validation",
+        "note": "not available"
+      },
+      "warnings": [
+        "warning ModelImporter.cpp:826: Make sure input cat has Int64 binding.",
+        "built as a strongly typed network from an explicitly quantized qdq graph, because this TensorRT version removed the implicit quantization api"
+      ],
+      "input_dtypes": {
+        "numerical": "float32",
+        "cat": "int64"
+      }
+    }
+  ]
+}

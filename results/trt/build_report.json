@@ -1,0 +1,74 @@
+{
+  "hardware": {
+    "collected_at_utc": "2026-08-28T00:34:04+00:00",
+    "host": {
+      "cpu_model": "Apple M3 Pro",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "system": "Darwin",
+      "machine": "arm64",
+      "processor": "arm",
+      "logical_cores": 12
+    },
+    "python": {
+      "version": "3.12.7",
+      "implementation": "CPython",
+      "executable": "/opt/anaconda3/bin/python3"
+    },
+    "libraries": {
+      "numpy": "2.5.2",
+      "torch": {
+        "version": "2.8.0",
+        "cuda_build_version": "not available",
+        "cudnn_version": "not available",
+        "cuda_available": false,
+        "mps_available": true,
+        "device_count": 0,
+        "device_names": []
+      },
+      "onnxruntime": {
+        "version": "1.22.0",
+        "available_providers": [
+          "CoreMLExecutionProvider",
+          "AzureExecutionProvider",
+          "CPUExecutionProvider"
+        ],
+        "device": "CPU"
+      },
+      "openvino": "2026.2.1-21919-ede283a88e3-releases/2026/2",
+      "tensorrt": {
+        "version": "not available",
+        "available": false,
+        "reason": "the tensorrt python package is not installed (No module named 'tensorrt')"
+      },
+      "pynvml": "not available"
+    },
+    "gpu": {
+      "source": "not available",
+      "index": 0,
+      "available": false,
+      "reason": "this host is macOS, where there is no NVIDIA driver and no cuda runtime, so every gpu measurement is unavailable by construction",
+      "name": "not available",
+      "driver_version": "not available",
+      "cuda_driver_version": "not available",
+      "total_memory_bytes": null,
+      "memory_bus_width_bits": null,
+      "max_memory_clock_mhz": null,
+      "max_sm_clock_mhz": null,
+      "compute_capability": "not available",
+      "power_limit_watts": null,
+      "peak_memory_bandwidth_gb_s": null
+    }
+  },
+  "tensorrt_available": false,
+  "reason": "the tensorrt python package is not installed (No module named 'tensorrt'). TensorRT engine builds need a NVIDIA gpu, the cuda runtime, and the tensorrt python package. None of those exist on Apple Silicon or on any cpu only host. Run this on a cuda machine through the gpu image this repository ships, with docker build -f docker/Dockerfile.tensorrt -t adrankbench-trt . and then docker run --gpus all adrankbench-trt. That image is built on nvcr.io/nvidia/tensorrt:25.01-py3, which carries TensorRT 10 and the cuda runtime already installed.",
+  "requested_models": [
+    "deepfm",
+    "dcn"
+  ],
+  "requested_precisions": [
+    "fp32",
+    "fp16",
+    "int8"
+  ],
+  "engines": []
+}

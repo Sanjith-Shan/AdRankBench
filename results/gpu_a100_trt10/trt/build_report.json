@@ -1,0 +1,155 @@
+{
+  "hardware": {
+    "collected_at_utc": "2026-08-28T05:06:30+00:00",
+    "host": {
+      "cpu_model": "AMD EPYC 7742 64-Core Processor",
+      "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+      "system": "Linux",
+      "machine": "x86_64",
+      "processor": "x86_64",
+      "logical_cores": 128
+    },
+    "python": {
+      "version": "3.12.3",
+      "implementation": "CPython",
+      "executable": "/usr/bin/python3"
+    },
+    "libraries": {
+      "numpy": "2.1.2",
+      "torch": {
+        "version": "2.8.0+cu128",
+        "cuda_build_version": "12.8",
+        "cudnn_version": "91002",
+        "cuda_available": true,
+        "mps_available": false,
+        "device_count": 1,
+        "device_names": [
+          "NVIDIA A100-SXM4-80GB"
+        ]
+      },
+      "onnxruntime": {
+        "version": "1.29.0",
+        "available_providers": [
+          "TensorrtExecutionProvider",
+          "CUDAExecutionProvider",
+          "CPUExecutionProvider"
+        ],
+        "device": "GPU"
+      },
+      "openvino": "not available",
+      "tensorrt": {
+        "version": "10.8.0.43",
+        "available": true,
+        "reason": ""
+      },
+      "pynvml": "not available"
+    },
+    "gpu": {
+      "source": "pynvml",
+      "index": 0,
+      "name": "NVIDIA A100-SXM4-80GB",
+      "driver_version": "570.195.03",
+      "cuda_driver_version": "12.8",
+      "total_memory_bytes": 85899345920,
+      "memory_bus_width_bits": 5120,
+      "max_memory_clock_mhz": 1593,
+      "max_sm_clock_mhz": 1410,
+      "compute_capability": "8.0",
+      "power_limit_watts": null,
+      "available": true,
+      "reason": "",
+      "peak_memory_bandwidth_gb_s": 2039.04
+    }
+  },
+  "tensorrt_available": true,
+  "reason": "",
+  "requested_models": [
+    "deepfm"
+  ],
+  "requested_precisions": [
+    "fp32",
+    "fp16",
+    "int8"
+  ],
+  "profile": {
+    "min_batch": 1,
+    "opt_batch": 256,
+    "max_batch": 4096
+  },
+  "onnx_graphs": {
+    "deepfm": "results/deepfm.onnx"
+  },
+  "engines": [
+    {
+      "model": "DeepFM",
+      "precision": "fp32",
+      "engine_path": "results/trt/deepfm_fp32_bs4096.engine",
+      "ok": true,
+      "message": "reused an engine that already existed on disk",
+      "build_seconds": 0.0,
+      "size_bytes": 86834524,
+      "min_batch": 1,
+      "opt_batch": 256,
+      "max_batch": 4096,
+      "onnx_path": "results/deepfm.onnx",
+      "tensorrt_version": "10.8.0.43",
+      "platform_has_fast_fp16": null,
+      "platform_has_fast_int8": null,
+      "calibration": {},
+      "warnings": [],
+      "input_dtypes": {}
+    },
+    {
+      "model": "DeepFM",
+      "precision": "fp16",
+      "engine_path": "results/trt/deepfm_fp16_bs4096.engine",
+      "ok": true,
+      "message": "reused an engine that already existed on disk",
+      "build_seconds": 0.0,
+      "size_bytes": 86834796,
+      "min_batch": 1,
+      "opt_batch": 256,
+      "max_batch": 4096,
+      "onnx_path": "results/deepfm_fp16.onnx",
+      "tensorrt_version": "10.8.0.43",
+      "platform_has_fast_fp16": null,
+      "platform_has_fast_int8": null,
+      "calibration": {},
+      "warnings": [],
+      "input_dtypes": {}
+    },
+    {
+      "model": "DeepFM",
+      "precision": "int8",
+      "engine_path": "results/trt/deepfm_int8_bs4096.engine",
+      "ok": false,
+      "message": "the onnx parser rejected the graph. In node 10 with name: deep_head.bias_DequantizeLinear and operator: DequantizeLinear (parseNode): INVALID_NODE: Invalid Node - deep_head.bias_DequantizeLinear\nIDequantizeLayer::setPrecision: Error Code 3: API Usage Error (Parameter check failed, condition: isQuantized(dataType). A DequantizeLayer can only run in DataType::kINT8, DataType::kFP8, DataType::kFP4 or DataType::kINT4precision)\nITensor::getDimensions: Error Code 3: API Usage Error (deep_head.bias_DequantizeLinear: only activation types allowed as input to this layer.)",
+      "build_seconds": null,
+      "size_bytes": null,
+      "min_batch": null,
+      "opt_batch": null,
+      "max_batch": null,
+      "onnx_path": "results/deepfm_int8.onnx",
+      "tensorrt_version": "10.8.0.43",
+      "platform_has_fast_fp16": null,
+      "platform_has_fast_int8": null,
+      "calibration": {
+        "cache_path": "results/trt/deepfm_int8_calibration.cache",
+        "cache_exists": false,
+        "cache_bytes": null,
+        "batches": 0,
+        "batch_size": 256,
+        "source_split": "validation",
+        "note": "not available"
+      },
+      "warnings": [
+        "warning ModelImporter.cpp:459: Make sure input cat has Int64 binding.",
+        "warning onnxOpImporters.cpp:1499: TensorRT doesn't support QuantizeLinear/DequantizeLinear with UINT8 zero_point. TensorRT will use INT8 instead.",
+        "error IDequantizeLayer::setPrecision: Error Code 3: API Usage Error (Parameter check failed, condition: isQuantized(dataType). A DequantizeLayer can only run in DataType::kINT8, DataType::kFP8, DataType::kFP4 or DataType::kINT4precision)",
+        "error ITensor::getDimensions: Error Code 3: API Usage Error (deep_head.bias_DequantizeLinear: only activation types allowed as input to this layer.)",
+        "error In node 10 with name: deep_head.bias_DequantizeLinear and operator: DequantizeLinear (parseNode): INVALID_NODE: Invalid Node - deep_head.bias_DequantizeLinear\nIDequantizeLayer::setPrecision: Error Code 3: API Usage Error (Parameter check failed, condition: isQuantized(dataType). A DequantizeLayer can only run in DataType::kINT8, DataType::kFP8, DataType::kFP4 or DataType::kINT4precision)\nITensor::getDimensions: Error Code 3: API Usage Error (deep_head.bias_DequantizeLinear: only activation types allowed as input to this layer.)"
+      ],
+      "input_dtypes": {}
+    }
+  ]
+}

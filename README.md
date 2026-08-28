@@ -26,27 +26,140 @@ All four interaction aware models beat the logistic regression baseline on real 
 
 ## Inference Optimization
 
-A trained ranker is only useful if it can score live traffic inside a tight latency budget, so the model has to leave the training framework and run on an inference optimized runtime. This stage exports the trained DeepFM model once to ONNX and compares three serving backends on the exact same held out test rows. The script is `scripts/run_inference_benchmark.py` and it runs raw PyTorch eager mode, ONNX Runtime, and OpenVINO on the cpu so the hardware target is identical across all three.
+A trained ranker is only useful if it can score live traffic inside a tight latency budget, so the model has to leave the training framework and run on an inference optimized runtime. This stage exports the trained model once to ONNX and then sweeps every serving backend the project supports across a grid of model, runtime, precision, and batch size, on the exact same held out test rows.
 
-The table below comes from the test split of the default 100000 row sample, which is 10000 held out rows scored in batches of 1024 with seed 42. Latency is the mean wall time per batch, p99 is the tail latency, throughput is the steady state samples per second, and AUC is a correctness check. Because every backend runs the same weights on the same rows the AUC values match to four decimals, which confirms the export and the optimized runtimes preserve the model output rather than trading accuracy for speed. The 0.783 AUC here sits just under the 2 million row number in the Results table because this fast inference run trains on the smaller default sample, and the latency comparison itself does not depend on the training set size.
+The runtimes are PyTorch eager mode, ONNX Runtime on the cpu, cuda, and TensorRT execution providers, a natively built TensorRT engine at fp32, fp16, and int8, and OpenVINO on the cpu. The reasoning behind each of them, the precision and calibration story, and the measurement methodology all live in `docs/INFERENCE.md`.
+
+### Two lanes, never blended
+
+OpenVINO and the ONNX Runtime cpu provider are the **cpu lane**. Everything with cuda or TensorRT in its name is the **gpu lane**. They answer different deployment questions, so their numbers are reported separately and are never combined into a single figure. Every row carries the hardware it ran on.
+
+### The cpu lane, measured
+
+Measured on an **Apple M3 Pro cpu** on a quiet machine, DeepFM, 10000 held out rows in batches of 1024, seed 42. This is a laptop cpu number and not a datacenter number, and it is stated that way wherever it appears.
 
 | Backend | Latency (ms/batch) | p99 (ms) | Throughput (samples/s) | AUC |
 | --- | --- | --- | --- | --- |
-| PyTorch | 2.154 | 3.031 | 464293 | 0.7827 |
-| ONNX Runtime | 4.168 | 18.477 | 239909 | 0.7827 |
-| OpenVINO | 1.467 | 2.067 | 681526 | 0.7827 |
+| PyTorch eager | 2.154 | 3.031 | 464,293 | 0.7827 |
+| ONNX Runtime | 4.168 | 18.477 | 239,909 | 0.7827 |
+| OpenVINO | 1.467 | 2.067 | 681,526 | 0.7827 |
 
 ![Inference latency by backend](results/inference_latency.png)
 
-ONNX Runtime and OpenVINO are inference optimization runtimes. They take an already trained graph and lower its serving latency by fusing operations, folding constants, and dispatching to tuned cpu kernels, all without touching the weights and without any retraining. OpenVINO is Intel's inference toolkit and it compiles the network for the host cpu, which is why it delivers the lowest and steadiest latency here, about 1.47 times faster per batch than eager PyTorch with a far lower p99 tail. ONNX Runtime is the open standard graph runtime and it also ships an OpenVINO execution provider. On this Apple Silicon machine its default cpu kernels did not beat eager PyTorch, but on the Intel x86 cpus that this kind of model is usually deployed on the ONNX Runtime MLAS kernels typically close or reverse that gap. The portable ONNX graph is also what lets the same trained model run later on OpenVINO, on a hardware accelerator, or behind a quantization pass with no change to the training code.
+All three backends run the same weights on the same rows, so the matching AUC is a correctness check rather than a coincidence. It confirms the export and the optimized runtimes preserve the model output instead of trading accuracy for speed. OpenVINO compiles the network for the host cpu, which is why it holds both the lowest latency and the tightest tail here.
 
-Reproduce the table with one command.
+The committed artifact in `results/inference_benchmark.md` covers the full sweep across both DeepFM and DCN at batch sizes 1, 256, 1024, and 4096. Note that it was captured while this laptop was running other work, and the report records the machine load next to the numbers for exactly that reason. Its absolute latencies are therefore higher than the quiet machine table above. The relative ordering and every accuracy column are unaffected, because those are deterministic on fixed rows.
+
+### The gpu lane, measured
+
+Measured on a rented **NVIDIA A100 SXM4 80GB** on RunPod Secure Cloud, driver 580.159.04, CUDA driver 13.0, TensorRT 11.2.1.2, ONNX Runtime 1.29.0, torch 2.8.0+cu128, host cpu an AMD EPYC 7742. The gpu was idle apart from this benchmark. These are rented cloud gpu numbers and they are never combined with the Apple Silicon cpu numbers above.
+
+TensorRT across all three precisions, median latency per batch and steady state throughput.
+
+| Precision | batch 1 | batch 256 | batch 1024 | batch 4096 | Peak throughput | AUC | LogLoss |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fp32 | 0.215 | 0.263 | 0.376 | 0.920 | 3,440,149 /s | 0.7731 | 0.4796 |
+| fp16 | 0.210 | 0.261 | 0.361 | 0.856 | 4,769,481 /s | 0.7731 | 0.4796 |
+| int8 | 0.207 | 0.246 | 0.347 | 0.750 | 5,386,846 /s | 0.7734 | 0.4782 |
+
+Against the other runtimes at batch 1024, on the same rows and the same gpu.
+
+| Backend | p50 (ms) | Throughput (samples/s) | AUC |
+| --- | --- | --- | --- |
+| TensorRT int8 | 0.347 | 2,936,026 | 0.7734 |
+| TensorRT fp16 | 0.361 | 2,825,700 | 0.7731 |
+| TensorRT fp32 | 0.376 | 2,728,896 | 0.7731 |
+| PyTorch eager CUDA fp32 | 0.823 | 222,178 | 0.7731 |
+| PyTorch eager CUDA fp16 autocast | 0.989 | 390,076 | 0.7731 |
+
+Engine build time is a one time cost and is reported on its own. fp32 took 4.1 s and produced an 86.6 MB engine, fp16 took 3.8 s and produced a 43.4 MB engine, and int8 took 25.4 s and produced a 106.2 MB engine.
+
+The raw artifacts for both gpu runs are committed. `results/gpu_a100_trt11/` is the run every number in this section comes from, on TensorRT 11.2.1.2 and driver 580.159.04, on an otherwise idle card. `results/gpu_a100_trt10/` is an earlier run of the same code on TensorRT 10.8.0.43 and driver 570.195.03, kept because it is a second TensorRT generation on the same model and it reaches the same conclusion about precision. Its absolute latencies should not be quoted, because that card was shared with another job at the time and the tails show it. Its medians agree with the newer run to within a few percent, which is the reason to trust the medians in both.
+
+### Lowering the precision barely helps, and that is the finding
+
+The prediction was that a DLRM style ranker is memory bandwidth bound rather than compute bound, so cutting the precision would return far less than the usual 2x for fp16 and 4x for int8. The measurement says the prediction was right, and more starkly than expected.
+
+Going from fp32 to fp16 buys between 1.01x and 1.07x. Going all the way to int8 buys between 1.04x and 1.23x. For comparison, a compute bound convolutional network on the same card would be expected to roughly double on fp16.
+
+Three independent pieces of evidence point at the same cause.
+
+The first is the engine sizes. The fp16 engine is genuinely half the size of the fp32 one, 43.4 MB against 86.6 MB, so the weights really were converted and this is not a case of a precision flag being quietly ignored. It still did not get faster. The int8 engine is **larger** than the fp32 engine at 106.2 MB, because the embedding table is not quantized and the quantize and dequantize node pairs add to the graph without removing the bulk of it.
+
+The second is PyTorch. Its fp16 autocast path is **slower** than its fp32 path, 0.989 ms against 0.823 ms at batch 1024. The casts cost real time and there is no arithmetic bottleneck for them to relieve.
+
+The third is the cost model in `src/inference/analysis.py`, which puts DeepFM's arithmetic intensity at 0.50 FLOPs per byte at batch 1 rising to 59 at batch 4096. The batch 4096 column is where int8 does best at 1.23x, which is exactly where the model is closest to being compute bound, and the batch 1 column is where it does worst at 1.04x, which is where it is most memory bound. The speedup tracks the arithmetic intensity.
+
+The practical conclusion is that quantizing this model is not where the wins are. The embedding gather is, and that is a memory layout and caching problem rather than a precision problem.
+
+### Int8 cost no accuracy at all
+
+| Precision | AUC | AUC delta | LogLoss | LogLoss delta |
+| --- | --- | --- | --- | --- |
+| fp32 | 0.7731 | reference | 0.4796 | reference |
+| fp16 | 0.7731 | 0.0000 | 0.4796 | 0.0000 |
+| int8 | 0.7734 | +0.0003 | 0.4782 | -0.0014 |
+
+Int8 came out marginally ahead on both metrics. That difference is small enough to be noise rather than a real improvement, and the honest reading is that int8 cost nothing measurable. The reason is visible in how the quantization was set up. Only the MatMul and Gemm operations were quantized, which is the multilayer perceptron. The embedding gather was deliberately left in fp32, because an embedding lookup moves bytes rather than doing arithmetic, so quantizing it would add a rounding step to every lookup and accelerate nothing. Most of this model's parameters therefore never left fp32, which is why the accuracy held and also why the speedup was small. The two results are the same fact seen from two sides.
+
+### Getting int8 to build at all
+
+The spec called for an `IInt8EntropyCalibrator2`. That path does not exist on TensorRT 11, which removed implicit quantization entirely along with `BuilderFlag.FP16`, `BuilderFlag.INT8`, and `set_calibration_profile`. Networks are strongly typed now, so precision is a property of the graph rather than a request to the builder. Int8 moved to explicit quantization, where the graph carries QuantizeLinear and DequantizeLinear pairs inserted by a calibration pass that runs before the builder. The calibration rows still come from the validation split, because calibration is a fitting procedure and fitting it on test rows would make the reported int8 loss look smaller than it is.
+
+Four separate incompatibilities had to be resolved between the ONNX Runtime quantizer and the TensorRT parser, each of which failed the build outright.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Calibration failure with no scaling factors | The calibrator does not attach under dynamic shapes | Moved to explicit qdq quantization |
+| `only activation types allowed as input to this layer` | ONNX Runtime quantizes bias to int32, TensorRT accepts int8, fp8, and fp4 only | `QuantizeBias: False` |
+| `TensorRT only supports symmetric quantization` | Asymmetric activation zero points | `ActivationSymmetric: True` |
+| `axis must be in the range [0, nbDims (0)]` | Scalar constants quantized with an axis attribute | Restricted the quantized ops to MatMul and Gemm |
+
+The last one is worth keeping in mind, because restricting the op list is what a person would have wanted anyway. Add and Mul on scalar constants were never going to be where the time went.
+
+### Two things that are not gpu numbers
+
+**ONNX Runtime never reached the gpu.** Its CUDA and TensorRT execution providers both failed to load with `libcublasLt.so.13: cannot open shared object file`, because ONNX Runtime 1.29 wants CUDA 13 libraries that this image does not carry. It fell back to the cpu provider without failing the run, which is exactly the dangerous case, because the rows still appear and still carry the correct AUC. The giveaway is the latency. ONNX Runtime on the so called cuda provider measured 105 ms per batch against the cpu provider's 94 ms, which is the same number, and against native TensorRT's 0.376 ms. A backend that silently answers from the wrong device is the reason this benchmark prints the provider list and the reason the accuracy column alone is not a sufficient check.
+
+**The cpu rows from this host are not comparable to anything.** PyTorch eager on the pod's EPYC measured 1900 ms per batch at batch 1024 against 5.4 ms on the Apple M3 Pro. That is thread thrash on a 128 core machine rather than a property of the processor, and no conclusion should be drawn from it. The Apple Silicon table earlier in this section is the cpu lane.
+
+### Reproducing it
 
 ```bash
 python scripts/run_inference_benchmark.py
+
+# On a cuda host. Builds engines first, then sweeps.
+python scripts/build_trt_engines.py --models deepfm dcn --precisions fp32 fp16 int8
+python scripts/run_inference_benchmark.py --models deepfm dcn --batch-sizes 1 32 256 1024 4096
 ```
 
-The script exports the ONNX graph itself, trains a DeepFM checkpoint on the spot when one is not already present in `results/`, and skips ONNX Runtime or OpenVINO gracefully with a short note when that package is missing, so it always runs end to end with whatever backends are installed. Pass `--sample-size` and `--batch-size` to change the workload.
+A pinned container is in `docker/Dockerfile.tensorrt` and the end to end rented GPU flow, including a bootstrap that installs TensorRT and a sync and run driver, is in `deploy/runpod/`. Backends that are not installed are skipped with a stated reason rather than failing, so the script always runs end to end with whatever is available.
+
+## Serving
+
+A benchmark table is not a serving system, so the inference work terminates in one. `src/serving/` is a FastAPI service that loads the ranker once, selects the fastest available backend through the same registry the benchmark uses, and scores a whole candidate set for one auction rather than an arbitrary batch.
+
+The part that matters is that **the fitted feature pipeline is persisted at training time and loaded at serving time**. A request arrives as raw Criteo shaped fields, not as a featurized tensor, so the train only standardization statistics, the frequency encoding maps, and the hash and cross configuration all have to travel with the model. Applying different transforms online than were applied offline is training and serving skew, and it is the classic silent failure in production ranking. There is a test that asserts the served features match the offline pipeline exactly, and another that asserts the online and batch lanes produce identical scores for identical rows, because both lanes share one model artifact and one feature pipeline.
+
+`scripts/run_load_test.py` drives the service at controlled concurrency and reports throughput, p50 through p999, the error rate, and the concurrency knee past which p99 climbs faster than throughput improves. It measures against an explicit p99 budget of 25 ms, derived in `docs/SERVING.md` as a slice of a roughly one hundred millisecond ad request. The current committed run **did not meet that budget** and says so plainly. It was also captured on a heavily loaded laptop, which the report records, so it should be rerun on a quiet machine before the number means anything.
+
+## Data Pipeline
+
+The pandas feature pipeline is bounded by memory. `src/spark/` reimplements it in PySpark so it is bounded by the cluster instead, writing partitioned Parquet the way a real pipeline hands data downstream. Correctness is the acceptance criterion rather than an afterthought, so there is a column by column parity test asserting the Spark and pandas paths produce matching output on the same rows across all three splits, including exact agreement on the md5 hash buckets.
+
+An honest negative result is worth recording. Across the row counts measured so far pandas stayed faster than Spark and no crossover was observed, which is the expected shape at small scale where Spark pays session startup and shuffle costs that it cannot yet amortize. Those runs were also taken on a contended machine, so `results/spark_pipeline_report.md` marks its wall times as upper bounds. No crossover point is extrapolated, because an extrapolated crossover is not a measurement.
+
+`scripts/run_data_insights.py` is the SQL half, running DuckDB over the data to produce `results/insights/insights_report.md`. Its through line is that each feature engineering decision this project already made is backed by a measurement rather than by convention. Categorical cardinality and tail coverage justify hash encoding, missingness correlated against the label justifies the is_missing indicators, feature pair lift over marginals justifies the crosses, and CTR drift across the temporal split justifies not using a random split. Every finding carries its sample size, so a high CTR slice with twelve impressions is not presented as a finding.
+
+## Benchmark Automation
+
+A benchmark nobody watches rots, so the benchmark is a gate. `scripts/check_regression.py` compares a fresh run against a committed baseline per cell, on model and backend and batch size, and it distinguishes accuracy regressions from latency regressions because a faster model that ranks worse is not an improvement.
+
+The noise handling is the part worth reading. It compares medians rather than means, since a real run here had a mean of 44.5 ms against a median of 25.6 ms. A regression has to clear a relative floor, an absolute floor, and a per cell noise floor estimated from the recorded spread. Accuracy gets no noise term at all, correctly, because the benchmark is deterministic on fixed rows at seed 42, so a moved AUC is a changed model. A baseline is scoped to its hardware and to its configuration, and the gate refuses to compare across either.
+
+This is not theoretical. The gate fired on a run where nothing in the code had changed, because the laptop was under concurrent load and two cells moved several hundred percent. Two other cells moved just as much and were correctly held back by their own noise floors. That episode is written up in `docs/BENCHMARK_AUTOMATION.md` as observed evidence rather than quietly dropped.
+
+`scripts/sweep.sh` detects whether it is on a cpu or gpu box, picks the matching config from `benchmarks/`, runs the build and the sweep and the gate, and archives everything into a timestamped directory with a manifest recording the host, the git sha, and whether the tree was dirty.
 
 ## Architecture
 
@@ -116,12 +229,29 @@ The download helper streams a public figshare mirror of the real Criteo dataset 
 Run the role aligned extensions on their own.
 
 ```bash
-python scripts/run_relevance.py
-python scripts/run_pacing.py
-python scripts/run_inference_benchmark.py
+python scripts/run_relevance.py            # two tower DSSM retrieval and relevance
+python scripts/run_pacing.py               # budget pacing with a PID controller
+python scripts/run_inference_benchmark.py  # runtime, precision, and batch size sweep
+python scripts/run_data_insights.py        # DuckDB analysis over the raw data
+python scripts/serve.py                    # the scoring service
+python scripts/run_load_test.py            # concurrency sweep against the service
+bash   scripts/sweep.sh                    # the whole benchmark procedure plus the gate
 ```
 
+Optional extras install separately so the base install stays small. `requirements-gpu.txt` carries the CUDA and TensorRT packages, `requirements-serving.txt` the service, and `requirements-spark.txt` the distributed pipeline.
+
 Every entry point seeds everything with seed 42 for reproducibility.
+
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| `docs/METHODOLOGY.md` | The training half. The temporal split, why NE and GAUC are the headline metrics, the synthetic data design |
+| `docs/INFERENCE.md` | The inference half. What each runtime is, precision and calibration, and the measurement methodology |
+| `docs/SERVING.md` | The service, training and serving skew, the latency budget, and closed loop load generation |
+| `docs/DATA_PIPELINE.md` | The Spark pipeline, how parity with pandas is guaranteed, and the partitioning choices |
+| `docs/BENCHMARK_AUTOMATION.md` | The regression gate statistics, the sweep driver, and reading a profile |
+| `docker/README.md` | Reproducing the GPU numbers in a pinned container, and the rented GPU flow |
 
 ## Methodology Notes
 

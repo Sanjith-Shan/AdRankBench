@@ -1,0 +1,23 @@
+# Dependencies for the distributed data lane only.
+#
+# These are kept out of requirements.txt on purpose. PySpark pulls in a JVM
+# dependency that nothing else in AdRankBench needs, and the benchmark, the
+# inference lane, and the DuckDB analytics all have to stay installable and
+# runnable on a machine with no Java at all. Install this file only when you
+# want to run the Spark pipeline.
+#
+#   pip install -r requirements-spark.txt
+#
+# PySpark also needs a JDK on the path or under JAVA_HOME. Version 4.x requires
+# Java 17 or later. Every Spark entry point probes for it and exits with a clear
+# message rather than a stack trace when it is missing.
+
+pyspark>=3.5,<5.0
+
+# DuckDB powers the SQL analytics lane in scripts/run_data_insights.py. It is an
+# in process engine with no JVM and no server, so that lane runs anywhere.
+duckdb>=1.0
+
+# Parquet support for the pandas side of the handoff, used when the insights
+# script materializes a sample for DuckDB to read.
+pyarrow>=14.0

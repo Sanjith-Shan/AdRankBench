@@ -1,0 +1,14 @@
+{
+  "source": "synthetic generator",
+  "rows": 200000,
+  "baseline_ctr": 0.161765,
+  "hardware": "Darwin arm64, 12 logical cores, Python 3.12.7, DuckDB 1.5.5",
+  "query_seconds": 5.461387665942311,
+  "selected_fields": [
+    "C1",
+    "C16",
+    "C2",
+    "C3",
+    "C4"
+  ]
+}

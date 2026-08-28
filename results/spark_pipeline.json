@@ -1,0 +1,34 @@
+{
+  "hardware": "Darwin arm64, 12 logical cores, Python 3.12.7",
+  "machine_state": "one minute load average 77.5 against 12 cores, contended",
+  "startup_seconds": 9.800766166998073,
+  "single": null,
+  "scale": [
+    {
+      "rows": 10000,
+      "source": "synthetic generator",
+      "pandas_seconds": 0.6173155419528484,
+      "pandas_rows_per_second": 16199.170959418054,
+      "pandas_resident_bytes": 20940132,
+      "pandas_frame_bytes": 15940132,
+      "spark_seconds": 145.67372175003402,
+      "spark_rows_per_second": 68.64656082007231,
+      "spark_output_bytes": 1144571,
+      "spark_input_partitions": 4,
+      "speedup": 0.004237658889584211
+    },
+    {
+      "rows": 25000,
+      "source": "synthetic generator",
+      "pandas_seconds": 1.4667666249442846,
+      "pandas_rows_per_second": 17044.292919434018,
+      "pandas_resident_bytes": 52350132,
+      "pandas_frame_bytes": 39850132,
+      "spark_seconds": 85.14869570895098,
+      "spark_rows_per_second": 293.60402754086994,
+      "spark_output_bytes": 2913094,
+      "spark_input_partitions": 4,
+      "speedup": 0.017225943541846825
+    }
+  ]
+}

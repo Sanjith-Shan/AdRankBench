@@ -1,0 +1,30 @@
+# BuildKit reads this file because it is named after the Dockerfile it sits
+# next to. It keeps the build context small so a rebuild after a code edit
+# uploads kilobytes instead of the several hundred megabytes of checkpoints and
+# ONNX graphs that live in results.
+
+.git
+.github
+.pytest_cache
+__pycache__
+**/__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+build
+dist
+.venv
+venv
+env
+.DS_Store
+**/.DS_Store
+
+# Data and trained artifacts are bind mounted at run time, never baked in.
+# The Dockerfile creates both directories itself, so nothing here needs to
+# survive into the image.
+data/*
+results/*
+!results/.gitkeep
+
+# Local only build notes.
+AdRankBench_CLAUDE.md

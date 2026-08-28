@@ -1,0 +1,79 @@
+# GPU only extras for AdRankBench inference benchmarking.
+#
+# These are additions on top of requirements.txt, not a replacement for it.
+# Install the base file first and then this one.
+#
+#   pip install -r requirements.txt
+#   pip uninstall -y onnxruntime
+#   pip install -r requirements-gpu.txt
+#
+# The uninstall in the middle is not optional. See the onnxruntime-gpu note below.
+#
+# Nothing here installs or runs on Apple Silicon. The CPU lane stays on
+# requirements.txt alone. Everything in this file assumes an x86_64 Linux host
+# with an NVIDIA GPU, and the pins below are chosen to match the exact NGC
+# container that docker/Dockerfile.tensorrt pins, which is TensorRT 10.8.0.43 on
+# CUDA 12.8.0.038 with driver 570.86.10.
+
+# TensorRT Python bindings.
+# Pinned to the exact version the pinned NGC container ships so an engine built
+# inside the container and an engine built on a bare host come from the same
+# builder. TensorRT engines are not portable across TensorRT versions or across
+# GPU architectures, so a floating pin here would silently invalidate every
+# cached engine and every timing number that came from one.
+# Inside docker/Dockerfile.tensorrt this line is filtered out at install time
+# because the base image already provides exactly this version, and layering a
+# second copy from PyPI on top of the container copy can shadow the libraries
+# the container was built against.
+tensorrt==10.8.0.43
+
+# CUDA host API bindings for allocating device buffers, copying host to device,
+# and managing the CUDA stream that TensorRT executes on.
+# cuda-python is chosen over pycuda for three reasons. It is NVIDIA's own
+# binding and it tracks the CUDA release cadence, so the version lines up with
+# the CUDA in the container. It ships prebuilt wheels, so the Docker layer is a
+# download rather than a source build against a local nvcc, which keeps the
+# image build fast and keeps it from breaking when the toolkit layout moves.
+# And the TensorRT 10.x Python samples and docs are written against cuda-python,
+# so the buffer and stream code follows the reference rather than diverging from
+# it. pycuda also installs a global context through pycuda.autoinit, which
+# fights TensorRT's explicit stream and context model and makes it easy to time
+# the wrong thing.
+cuda-python==12.8.0
+
+# ONNX Runtime with the CUDA and TensorRT execution providers.
+# This package CONFLICTS with the onnxruntime package in requirements.txt.
+# Both install the same top level onnxruntime module, and pip will happily leave
+# both on disk with one silently shadowing the other, which produces a session
+# that reports CUDAExecutionProvider as available and then quietly runs on the
+# CPU. Uninstall the CPU package first and let this one serve both lanes.
+# onnxruntime-gpu still provides CPUExecutionProvider, so nothing is lost.
+# The TensorRT execution provider inside a given onnxruntime-gpu wheel is
+# compiled against one specific TensorRT minor version. If a session built with
+# providers TensorrtExecutionProvider does not list it in get_providers, this pin
+# and the container TensorRT version have drifted apart and one of them has to
+# move. 1.21.0 is the pin chosen to sit alongside CUDA 12.8 and TensorRT 10.8.
+onnxruntime-gpu==1.21.0
+
+# NVML bindings for power draw, clock throttle reasons, and device memory used.
+# This is the telemetry lane. Latency numbers without a power and clock reading
+# next to them cannot distinguish a genuinely fast configuration from one that
+# was thermally throttled or one that was still ramping clocks after warmup, and
+# device memory used is what tells you whether an engine actually fits.
+# The version tracks the driver branch, and 12.570.86 is the branch that matches
+# the 570.86.10 driver the pinned container expects.
+nvidia-ml-py==12.570.86
+
+# Notes on packages that are deliberately NOT pinned here.
+#
+# torch is left to requirements.txt. A plain pip install torch on Linux pulls a
+# CUDA build already, and docker/Dockerfile.tensorrt installs a specific cu128
+# build from the PyTorch index before requirements.txt runs so the CUDA minor
+# matches the container. Pinning a second torch here would fight that.
+#
+# openvino stays in requirements.txt and stays installed on the GPU box on
+# purpose. It is the CPU lane. Keeping it present means one run can report the
+# CPU baseline and the GPU numbers side by side, clearly labeled as different
+# hardware, rather than pretending the two are comparable.
+#
+# pycuda is not here. See the cuda-python note above.

@@ -1,0 +1,51 @@
+# CPU only sweep. This is what runs today on Apple Silicon with nothing but
+# requirements.txt installed, expressed as a config instead of a flag string.
+#
+# The schema is documented in docs/INFERENCE.md. Every key maps one to one onto
+# a command line flag, so this file is a record of a run rather than a new
+# execution engine.
+
+name: cpu_only
+description: >
+  Reproduces the three backend CPU comparison in the README Inference
+  Optimization section. PyTorch eager against ONNX Runtime against OpenVINO,
+  one model, one precision, on the same held out test rows.
+
+# Free text hardware label. It is stamped onto every row this config produces so
+# no number can end up in a table without the machine it came from attached.
+# Edit this when the config is run somewhere else.
+hardware: "Apple M3 Pro, 11 core CPU, 18 GB unified memory, macOS"
+
+data:
+  data_path: data/criteo.csv
+  sample_size: 100000
+  # false means use the real Criteo file when it is present at data_path and
+  # fall back to the synthetic generator when it is not. true forces synthetic.
+  synthetic: false
+
+run:
+  checkpoint: results/DeepFM.pt
+  output: results/cpu_only
+  repeats: 20
+  warmup: 10
+  # The default batch size. matrix.batch_sizes below overrides it when set.
+  batch_size: 1024
+
+matrix:
+  models: [deepfm]
+  runtimes: [pytorch, onnxruntime-cpu, openvino]
+  precisions: [fp32]
+  # Batch size 1 is the single request serving question and batch size 4096 is
+  # the throughput question. They are different questions, so both are swept.
+  batch_sizes: [1, 256, 1024, 4096]
+
+# Combinations to drop from the cartesian product. A rule matches a cell when
+# every key in the rule matches that cell, so a rule with one key drops a whole
+# plane.
+exclude: []
+
+notes: >
+  There is no GPU in this lane, so there is no fp16 row and no TensorRT row.
+  OpenVINO wins here on Apple Silicon and on Intel CPUs for the same reason,
+  which is ahead of time graph compilation for the host CPU. Nothing in this
+  file may be compared against a row from gpu_full.yaml. Different hardware.

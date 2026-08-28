@@ -1,0 +1,95 @@
+# One line run wiring for the AdRankBench GPU inference image.
+#
+# Paths here are relative to this file, which lives in docker/, so the build
+# context is the repository root one level up and the two bind mounts point at
+# the repository's own data and results directories.
+#
+# From the repository root
+#   docker compose -f docker/docker-compose.yml build
+#   docker compose -f docker/docker-compose.yml run --rm engines
+#   docker compose -f docker/docker-compose.yml run --rm bench
+#
+# Engines and results land in ./results on the host because of the bind mount,
+# so they survive the container and can be committed or copied off the box.
+
+x-gpu-runtime: &gpu-runtime
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.tensorrt
+    args:
+      # Override on the command line to move the pin without editing a file.
+      #   docker compose -f docker/docker-compose.yml build \
+      #     --build-arg TRT_IMAGE=nvcr.io/nvidia/tensorrt:25.03-py3
+      TRT_IMAGE: nvcr.io/nvidia/tensorrt:25.01-py3
+      TORCH_VERSION: 2.7.1
+      TORCH_INDEX: https://download.pytorch.org/whl/cu128
+  image: adrankbench-trt:25.01
+
+  # The GPU request. This is the compose equivalent of docker run --gpus all.
+  # Compose 2.30 and later also accept a plain "gpus: all" key, but the deploy
+  # form below works on every Compose v2 release, so it is the one used here.
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+  # PyTorch DataLoader workers and the CUDA pinned host allocator both live in
+  # /dev/shm, and the Docker default of 64 MB is small enough that a large batch
+  # sweep dies with a bus error that looks like a code bug. 8 GB is generous and
+  # costs nothing when unused.
+  shm_size: "8gb"
+
+  # Bind mounts rather than named volumes so the Criteo file and every engine,
+  # report, and chart are ordinary files on the host.
+  volumes:
+    - ../data:/workspace/adrankbench/data
+    - ../results:/workspace/adrankbench/results
+
+  working_dir: /workspace/adrankbench
+
+  environment:
+    # Keep the seed and the headless matplotlib backend explicit rather than
+    # inherited, so a run inside the container matches a run outside it.
+    PYTHONUNBUFFERED: "1"
+    MPLBACKEND: "Agg"
+    # Pin the visible devices to one GPU by default. The benchmark is single
+    # device and leaving every GPU visible on a multi GPU box makes the numbers
+    # depend on which device the runtime happened to pick.
+    CUDA_VISIBLE_DEVICES: "${CUDA_VISIBLE_DEVICES:-0}"
+
+  # NVML needs to see the real device to report power and clocks, and Nsight
+  # needs the perf counters. Neither is required for correctness, so both are
+  # left off by default. Uncomment if the telemetry columns come back empty.
+  # cap_add:
+  #   - SYS_ADMIN
+
+  # A long benchmark should not be killed by the host OOM killer picking the
+  # wrong process. Compose passes this straight through to the container.
+  init: true
+
+services:
+  # Build the TensorRT engines. Run this before bench on a fresh box, because
+  # engine build time is measured and reported separately from inference time
+  # and a cold engine build inside a timing run would contaminate it.
+  engines:
+    <<: *gpu-runtime
+    command: ["python3", "scripts/build_trt_engines.py"]
+
+  # The benchmark sweep. Append flags after the service name and they replace
+  # this command, for example
+  #   docker compose -f docker/docker-compose.yml run --rm bench \
+  #     python3 scripts/run_inference_benchmark.py --batch-size 4096 --repeats 50
+  bench:
+    <<: *gpu-runtime
+    command: ["python3", "scripts/run_inference_benchmark.py"]
+
+  # An interactive shell in the same image, for poking at nvidia-smi, polygraphy,
+  # and trtexec when a run does not do what it should.
+  shell:
+    <<: *gpu-runtime
+    command: ["bash"]
+    stdin_open: true
+    tty: true

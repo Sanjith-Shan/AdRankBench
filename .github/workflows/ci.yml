@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+# Note on a lint job. There is no linter configured in this repository. There is
+# no ruff, flake8, black, or pre commit config, and no pyproject or setup.cfg to
+# hold one. Adding a formatter here would reformat every existing file on its
+# first run and bury the actual changes, so no lint job is added. If a linter is
+# ever configured, this is where its job goes.
+#
+# Note on a GPU job. There is no GPU runner available to this repository, so
+# nothing here runs CUDA, TensorRT, or the ONNX Runtime GPU providers. The GPU
+# lane is reproduced by hand on a rented CUDA box following docker/README.md.
+# Everything below runs on a standard GitHub hosted CPU runner.
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Smoke test the benchmark on synthetic data
+        run: python scripts/run_benchmark.py --synthetic --sample-size 5000 --device cpu --models logistic,fm --output /tmp/ci_smoke
+
+  inference-smoke:
+    # Keeps the export and serving code path green on every commit. It runs the
+    # real script end to end on synthetic data at a tiny sample size, on the CPU,
+    # so a broken ONNX export or a broken runtime wrapper fails here rather than
+    # on a rented GPU box. The GPU backends are absent on this runner and the
+    # script is expected to skip them with a note rather than fail, which is
+    # itself part of what this job checks.
+    name: inference benchmark smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Report the runtimes that are actually available
+        # Recorded in the log on purpose. A latency number is only meaningful
+        # next to the hardware and the runtime versions that produced it, and
+        # this is the CI equivalent of that label.
+        run: |
+          python - <<'PY'
+          import platform
+          print("platform", platform.platform(), platform.processor())
+          for name in ("torch", "onnx", "onnxruntime", "openvino"):
+              try:
+                  mod = __import__(name)
+                  print(name, getattr(mod, "__version__", "unknown"))
+              except ImportError:
+                  print(name, "not installed")
+          try:
+              import onnxruntime as ort
+              print("onnxruntime providers", ort.get_available_providers())
+          except ImportError:
+              pass
+          PY
+
+      - name: Run the inference benchmark on synthetic data
+        run: |
+          python scripts/run_inference_benchmark.py \
+            --synthetic \
+            --sample-size 5000 \
+            --batch-size 256 \
+            --repeats 2 \
+            --warmup 1 \
+            --checkpoint /tmp/ci_inference/DeepFM.pt \
+            --output /tmp/ci_inference
+
+      - name: Check the run produced its artifacts
+        run: |
+          test -f /tmp/ci_inference/inference_benchmark.md
+          test -f /tmp/ci_inference/inference_latency.png
+          echo "--- report ---"
+          cat /tmp/ci_inference/inference_benchmark.md
+
+  configs:
+    # The sweep configs and the compose file are not executed by CI, so nothing
+    # else would catch a typo in them until someone is paying by the second for
+    # an A100. This job parses them.
+    name: sweep configs and compose file
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pyyaml
+        # CI only. pyyaml is deliberately not added to requirements.txt, since
+        # nothing in the library or the scripts imports it yet.
+        run: pip install pyyaml
+
+      - name: Parse the sweep configs and check the schema
+        run: |
+          python - <<'PY'
+          import glob
+          import sys
+
+          import yaml
+
+          REQUIRED = ("name", "description", "hardware", "data", "run", "matrix")
+          MATRIX_KEYS = ("models", "runtimes", "precisions", "batch_sizes")
+          SINGULAR = {
+              "models": "model",
+              "runtimes": "runtime",
+              "precisions": "precision",
+              "batch_sizes": "batch_size",
+          }
+
+          paths = sorted(glob.glob("benchmarks/*.yaml"))
+          if not paths:
+              print("FAIL no configs found under benchmarks/")
+              sys.exit(1)
+
+          any_failed = False
+          for path in paths:
+              bad = False
+              cfg = yaml.safe_load(open(path))
+              missing = [k for k in REQUIRED if k not in cfg]
+              if missing:
+                  print(f"FAIL {path} is missing {missing}")
+                  any_failed = True
+                  continue
+              matrix = cfg["matrix"]
+              for key in MATRIX_KEYS:
+                  if key not in matrix or not isinstance(matrix[key], list) or not matrix[key]:
+                      print(f"FAIL {path} matrix.{key} must be a non empty list")
+                      bad = True
+              # Exclusion rules may only name dimensions that exist, otherwise a
+              # typo silently excludes nothing and the sweep quietly grows.
+              allowed = set(SINGULAR.values())
+              for rule in cfg.get("exclude") or []:
+                  unknown = set(rule) - allowed
+                  if unknown:
+                      print(f"FAIL {path} exclude rule names unknown dimensions {sorted(unknown)}")
+                      bad = True
+              if bad:
+                  any_failed = True
+                  continue
+              total = 1
+              for key in MATRIX_KEYS:
+                  total *= len(matrix[key])
+              print(f"OK   {path} name={cfg['name']} cells={total} excludes={len(cfg.get('exclude') or [])}")
+          sys.exit(1 if any_failed else 0)
+          PY
+
+      - name: Validate the compose file
+        run: docker compose -f docker/docker-compose.yml config --quiet
+
+  dockerfile-check:
+    # Static check only. A real build of docker/Dockerfile.tensorrt is not
+    # feasible on a GitHub hosted runner. The pinned NGC base image is roughly
+    # 20 GB unpacked and the CUDA build of PyTorch adds several more, against a
+    # runner that has about 14 GB of free disk, so the build would fail on disk
+    # space rather than on anything wrong with the Dockerfile. Pulling from
+    # nvcr.io also needs enough of the image to be worth the minutes.
+    #
+    # What is feasible is buildx check, which parses the Dockerfile, runs the
+    # BuildKit lint rules over it, and resolves the base image metadata without
+    # pulling any layers. That catches Dockerfile rot and a base tag that has
+    # been removed upstream, which are the two failure modes worth catching here.
+    # The full build is exercised by hand on the CUDA box, following
+    # docker/README.md.
+    name: dockerfile lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Lint the TensorRT Dockerfile and resolve the pinned base image
+        run: docker buildx build --check -f docker/Dockerfile.tensorrt .

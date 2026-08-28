@@ -1,0 +1,91 @@
+# Full CUDA sweep. Model by runtime by precision by batch size.
+#
+# This is the config that produces the GPU table. It is meant to be run inside
+# the pinned container from docker/Dockerfile.tensorrt so the TensorRT version
+# that builds the engines is the same one every time. The schema is documented
+# in docs/INFERENCE.md.
+
+name: gpu_full
+description: >
+  The full inference runtime comparison on one NVIDIA GPU. Five runtimes across
+  three precisions across five batch sizes, on the same held out test rows and
+  the same trained weights, with engine build time reported separately from
+  inference time.
+
+# Every row this config produces carries this label. Fill in the real device and
+# driver before publishing any number from this file. The container prints both
+# on startup and nvidia-smi confirms them.
+hardware: "NVIDIA A100 80GB PCIe, driver 570.x, CUDA 12.8, TensorRT 10.8.0.43, x86_64 Linux"
+
+data:
+  data_path: data/criteo.csv
+  # Two million rows is the sample the README headline table is trained on, so
+  # the GPU run scores the same test split rather than a smaller one.
+  sample_size: 2000000
+  synthetic: false
+
+run:
+  checkpoint: results/DeepFM.pt
+  output: results/gpu_full
+  # More repeats than the CPU lane because p99 is the number that matters for
+  # serving and a stable p99 needs a lot of samples. At batch size 1 this is
+  # cheap. At batch size 16384 it is the long pole of the sweep.
+  repeats: 50
+  warmup: 50
+  batch_size: 1024
+
+matrix:
+  models: [deepfm]
+
+  # pytorch          eager mode, the reference the other rows are measured against
+  # onnxruntime-cuda ONNX Runtime with the CUDA execution provider
+  # onnxruntime-trt  ONNX Runtime with the TensorRT execution provider
+  # tensorrt         a native TensorRT engine driven directly, no ORT in the path
+  # openvino         the CPU lane, present on purpose and never blended with the rest
+  runtimes: [pytorch, onnxruntime-cuda, onnxruntime-trt, tensorrt, openvino]
+
+  precisions: [fp32, fp16, int8]
+
+  # Batch size 1 answers the single request latency question and the large sizes
+  # answer the offline scoring throughput question. The middle sizes are there to
+  # show where the curve bends, which is the evidence for or against the memory
+  # bandwidth bound prediction in docs/INFERENCE.md.
+  batch_sizes: [1, 64, 1024, 4096, 16384]
+
+# Cells that cannot exist or would be misleading, dropped from the product.
+exclude:
+  # PyTorch eager is the fp32 reference. autocast fp16 is a different experiment
+  # and quantized eager is a different experiment again. Neither belongs in a
+  # runtime comparison that is supposed to hold the model fixed.
+  - {runtime: pytorch, precision: fp16}
+  - {runtime: pytorch, precision: int8}
+  # The ONNX Runtime CUDA execution provider does not do post training int8 the
+  # way the TensorRT path does. Leaving the cell in would produce a number that
+  # looks comparable and is not.
+  - {runtime: onnxruntime-cuda, precision: int8}
+  # OpenVINO is the CPU lane. It has no business claiming a GPU precision.
+  - {runtime: openvino, precision: fp16}
+  - {runtime: openvino, precision: int8}
+
+# INT8 post training quantization needs a calibration set. These keys are read
+# only when a precision of int8 is in the matrix.
+calibration:
+  # validation, never test. The test split is the number being reported, and
+  # calibrating on it leaks the evaluation set into the model that is evaluated.
+  split: validation
+  # Rows drawn from that split to fit the activation ranges. A few hundred
+  # batches is the usual sufficient amount and more mostly buys build time.
+  num_samples: 51200
+  batch_size: 1024
+  # entropy is the TensorRT default and usually the right one. minmax is here
+  # for the case where entropy calibration clips a heavy tail badly.
+  algorithm: entropy
+  cache: results/gpu_full/int8_calibration.cache
+
+notes: >
+  Run engines first and the sweep second, so the engine build cost is measured
+  on its own and never lands inside an inference timing. Every GPU timing needs
+  an explicit device synchronize before the clock stops, because a CUDA launch
+  returns before the work is done and an unsynchronized timer measures the
+  launch rather than the inference. The INT8 rows report AUC delta against the
+  fp32 row of the same runtime, and that delta is published whatever it says.

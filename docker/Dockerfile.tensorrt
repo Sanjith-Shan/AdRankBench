@@ -1,0 +1,132 @@
+# syntax=docker/dockerfile:1.7
+
+# AdRankBench GPU inference image.
+#
+# The base tag is pinned exactly rather than floated, because a TensorRT engine
+# is a build artifact tied to the TensorRT version, the CUDA version, and the GPU
+# architecture that built it. Floating the tag would change the builder under the
+# benchmark and make two runs of the same command produce numbers that are not
+# comparable. The pin is what makes the reported latencies reproducible.
+#
+# Everything below is read off the pinned image's own config, not off a release
+# note, so the comment cannot drift from the tag.
+#
+#   nvcr.io/nvidia/tensorrt:25.01-py3
+#     TensorRT        10.8.0.43
+#     CUDA            12.8.0.038
+#     Driver expected 570.86.10
+#     cuDNN           9.7.0.66
+#     cuBLAS          12.8.3.14
+#     NCCL            2.25.1
+#     Polygraphy      0.49.16
+#     Base OS         Ubuntu 24.04, so the system Python is 3.12
+#     WORKDIR         /workspace
+#     ENTRYPOINT      /opt/nvidia/nvidia_entrypoint.sh
+#
+# The driver line is the one that bites. A host driver older than 570 cannot run
+# this image unless the CUDA forward compatibility package in the image is used,
+# and that path only works on data center GPUs. docker/README.md has the fallback.
+#
+# To move the pin, change the tag and reread the versions with
+#   docker run --rm nvcr.io/nvidia/tensorrt:<tag> env | grep -E 'TENSORRT|CUDA'
+ARG TRT_IMAGE=nvcr.io/nvidia/tensorrt:25.01-py3
+FROM ${TRT_IMAGE}
+
+# The pinned torch build. cu128 matches the CUDA 12.8 in the base image. Left as
+# a build arg so a different base tag can be paired with a different torch
+# without editing the body of the file.
+ARG TORCH_VERSION=2.7.1
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
+
+LABEL org.opencontainers.image.title="AdRankBench GPU inference"
+LABEL org.opencontainers.image.description="TensorRT, ONNX Runtime, and PyTorch inference benchmark for the AdRankBench DeepFM ranker"
+LABEL org.opencontainers.image.source="https://github.com/Sanjith-Shan/AdRankBench"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Fail the build on the first bad command in a pipeline rather than on the last.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    MPLBACKEND=Agg \
+    PYTHONPATH=/workspace/adrankbench
+
+WORKDIR /workspace/adrankbench
+
+# One apt layer. libgomp is what the OpenVINO and ONNX Runtime CPU kernels link
+# against, git is here so the container can report the commit it is benchmarking.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Assert the base image is the one the pin claims before anything is layered on
+# top. If the tag was retagged upstream or the ARG was overridden with a
+# mismatched image, this fails here rather than producing engines that quietly
+# came from a different builder.
+RUN python3 -c "import tensorrt, sys; v = tensorrt.__version__; print('base image TensorRT', v); sys.exit(0 if v.startswith('10.8.') else 1)"
+
+# Dependencies go in their own layer, ahead of the source copy, so editing the
+# benchmark scripts does not reinstall multi gigabyte wheels.
+COPY requirements.txt requirements-gpu.txt ./
+
+# One RUN for the whole Python install so the intermediate state never lands in
+# a layer. The order matters and each step is here for a reason.
+#
+# torch first, from the cu128 index, so the later requirements.txt line sees the
+# requirement already satisfied and does not pull the default PyPI CUDA build on
+# top of it.
+#
+# Then requirements.txt, which brings numpy, pandas, scikit-learn, matplotlib,
+# onnx, the CPU onnxruntime, and openvino.
+#
+# Then the CPU onnxruntime comes straight back off, because onnxruntime and
+# onnxruntime-gpu install the same top level module and leaving both on disk
+# gives a session that advertises CUDA and then runs on the CPU.
+#
+# Then the GPU extras, with the tensorrt line filtered out. The base image
+# already provides exactly 10.8.0.43 and layering a PyPI copy on top of it can
+# shadow the libraries the image was built against. The pin stays in the file
+# for anyone installing outside this container.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 -m pip install --upgrade pip \
+    && python3 -m pip install --index-url "${TORCH_INDEX}" "torch==${TORCH_VERSION}" \
+    && python3 -m pip install -r requirements.txt \
+    && python3 -m pip uninstall -y onnxruntime \
+    && grep -vE '^[[:space:]]*tensorrt[=<>]' requirements-gpu.txt > /tmp/requirements-gpu-container.txt \
+    && python3 -m pip install -r /tmp/requirements-gpu-container.txt \
+    && rm -f /tmp/requirements-gpu-container.txt
+
+# Source last so a code change rebuilds one small layer.
+COPY . .
+
+# data and results are the two mount points. They are created here so a run with
+# no bind mount still writes somewhere sensible instead of failing, and a run
+# with a bind mount just covers them.
+RUN mkdir -p /workspace/adrankbench/data /workspace/adrankbench/results
+
+# A build time smoke check of the import surface the benchmark depends on. This
+# catches a broken install now rather than forty minutes into a GPU rental.
+# It deliberately does not touch a device, since the build host has no GPU.
+RUN python3 - <<'PY'
+import onnxruntime
+import tensorrt
+import torch
+print("torch", torch.__version__)
+print("tensorrt", tensorrt.__version__)
+print("onnxruntime", onnxruntime.__version__)
+print("onnxruntime providers", onnxruntime.get_available_providers())
+PY
+
+# The entrypoint stays the NVIDIA one inherited from the base image. It prints
+# the driver and CUDA banner and warns when the host driver is too old, which is
+# exactly the diagnostic you want first when a run fails on a rented box.
+#
+# The default command runs the benchmark with its own defaults. Override it with
+# anything, for example
+#   docker compose -f docker/docker-compose.yml run --rm bench \
+#     python3 scripts/build_trt_engines.py
+CMD ["python3", "scripts/run_inference_benchmark.py"]

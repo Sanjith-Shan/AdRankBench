@@ -1,0 +1,49 @@
+# Serving only extras for the AdRankBench ranking service.
+#
+# These are additions on top of requirements.txt, not a replacement for it. The
+# service loads the same checkpoint, the same exported graph, and the same
+# feature pipeline the rest of the project uses, so it needs everything in the
+# base file before it needs anything in this one.
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-serving.txt
+#
+# Nothing here is GPU specific. The whole serving layer runs on a CPU only host
+# and that is where its measurements were taken, on an Apple M3 Pro. For a GPU
+# serving deployment install requirements-gpu.txt as well and the backend probe
+# in src/serving/runtime.py will pick the CUDA or TensorRT lane on its own,
+# because it asks the same registry the inference benchmark sweeps.
+#
+# The pins are lower bounds with an upper guard on the majors, which is the same
+# discipline requirements.txt uses. The exact pinning in requirements-gpu.txt
+# exists because a TensorRT engine is tied to the version that built it. Nothing
+# in this file has that property, so an over tight pin here would buy nothing and
+# cost compatibility with whatever the base environment already resolved.
+
+# The web framework. Chosen for its pydantic integration rather than for speed,
+# because the request and response contracts in src/serving/schemas.py are the
+# part of the service most likely to save someone from a silent mistake, and
+# FastAPI makes them the source of truth for validation and for the generated
+# OpenAPI document at the same time.
+# 0.100 is the floor because that is the first release built on pydantic v2,
+# and the schemas use v2 validators.
+fastapi>=0.100,<1.0
+
+# The ASGI server. The standard extra pulls uvloop and httptools, which are the
+# parts that make the event loop and the http parsing fast enough that they are
+# not what the load test is measuring.
+uvicorn[standard]>=0.23,<1.0
+
+# The request and response models. Listed explicitly rather than inherited from
+# FastAPI because src/serving/schemas.py imports it directly, and a dependency
+# that is imported by name belongs in the requirements file by name.
+pydantic>=2.0,<3.0
+
+# The async http client. It is both a runtime dependency of the load generator
+# in scripts/run_load_test.py and the transport the FastAPI test client uses, so
+# it is needed to run the service under load and to run the test suite.
+httpx>=0.24,<1.0
+
+# Columnar io for the batch lane. scripts/run_batch_scoring.py reads and writes
+# Parquet shards, which pandas delegates to pyarrow.
+pyarrow>=12.0

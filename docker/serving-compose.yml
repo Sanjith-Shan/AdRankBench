@@ -1,0 +1,123 @@
+# One line run wiring for the AdRankBench CPU serving image.
+#
+# Paths here are relative to this file, which lives in docker/, so the build
+# context is the repository root one level up and the two bind mounts point at
+# the repository's own data and results directories. This mirrors
+# docker/docker-compose.yml, which does the same job for the GPU benchmarking
+# image.
+#
+# From the repository root
+#   docker compose -f docker/serving-compose.yml build
+#   docker compose -f docker/serving-compose.yml run --rm bundle
+#   docker compose -f docker/serving-compose.yml up ranker
+#   docker compose -f docker/serving-compose.yml run --rm loadtest
+#   docker compose -f docker/serving-compose.yml run --rm batch
+#
+# Build the bundle before starting the service the first time. It is a separate
+# step for the same reason the TensorRT engine build is a separate step in the
+# GPU compose file. It is a one time cost that a real deployment pays at build
+# time rather than per request, it can take minutes because it trains a
+# checkpoint when none exists, and folding it into the service start would put
+# it inside the first request's latency.
+
+x-serving: &serving
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.serving
+    args:
+      # Override on the command line to move the pin without editing a file.
+      #   docker compose -f docker/serving-compose.yml build \
+      #     --build-arg BASE_IMAGE=python:3.12-slim-bookworm
+      BASE_IMAGE: python:3.11-slim-bookworm
+      TORCH_VERSION: 2.7.1
+      TORCH_INDEX: https://download.pytorch.org/whl/cpu
+  image: adrankbench-serving:cpu
+
+  # Bind mounts rather than named volumes, so the serving bundle, the scored
+  # output, and the load test report are ordinary files on the host that can be
+  # read, committed, or copied off the box.
+  volumes:
+    - ../data:/workspace/adrankbench/data
+    - ../results:/workspace/adrankbench/results
+
+  working_dir: /workspace/adrankbench
+
+  environment:
+    PYTHONUNBUFFERED: "1"
+    MPLBACKEND: "Agg"
+    ADRANK_BUNDLE_DIR: /workspace/adrankbench/results/serving/bundle
+    ADRANK_ARTIFACT_DIR: /workspace/adrankbench/results
+    ADRANK_MODEL: "${ADRANK_MODEL:-deepfm}"
+    ADRANK_PORT: "8000"
+    # The queueing parameter of the service. Raising it does not raise
+    # throughput on a CPU bound Python worker, it moves where the tail latency
+    # comes from, so it is a knob a capacity plan sets deliberately rather than
+    # a number to maximize. docs/SERVING.md has the argument.
+    ADRANK_THREADS: "${ADRANK_THREADS:-8}"
+    ADRANK_MAX_CANDIDATES: "${ADRANK_MAX_CANDIDATES:-4096}"
+    # Pin the thread counts the numerical libraries spawn. Left unset, every one
+    # of them sizes itself to the host core count, several of them at once, and
+    # a serving container then oversubscribes its own CPU allocation and reports
+    # a tail latency that is mostly context switching. This is the single most
+    # common way a containerized inference service is slower than the same code
+    # outside a container.
+    OMP_NUM_THREADS: "${OMP_NUM_THREADS:-4}"
+    MKL_NUM_THREADS: "${MKL_NUM_THREADS:-4}"
+
+  # A long running service should not be reparented to pid 1 with no signal
+  # handling. Compose passes this straight through to the container.
+  init: true
+
+services:
+  # Build or rebuild the serving bundle. Run this once before the first up.
+  # It fits the feature pipeline on the train split, loads or trains the
+  # checkpoint, exports the graph, fits the calibration on validation, and
+  # writes the manifest with a fingerprint on every member.
+  bundle:
+    <<: *serving
+    command:
+      ["python", "scripts/serve.py", "--build-only"]
+
+  # The service itself. Published on 8000 by default.
+  ranker:
+    <<: *serving
+    ports:
+      - "${ADRANK_PORT:-8000}:8000"
+    # The image already carries a healthcheck against /health. Compose surfaces
+    # it in docker compose ps, which is where an operator looks first.
+
+  # The load test, pointed at the ranker service rather than spawning its own.
+  # depends_on with service_healthy means the sweep does not start until the
+  # ranker has loaded its bundle, probed its backends, and warmed them, so the
+  # first cell is not measuring a cold start.
+  loadtest:
+    <<: *serving
+    depends_on:
+      ranker:
+        condition: service_healthy
+    command:
+      [
+        "python",
+        "scripts/run_load_test.py",
+        "--url",
+        "http://ranker:8000",
+        "--no-spawn",
+        "--label",
+        "container, cpu lane",
+      ]
+
+  # The batch lane. Same image, same bundle, same backend probe, different
+  # entry point. That sharing is the point rather than a convenience.
+  batch:
+    <<: *serving
+    command:
+      ["python", "scripts/run_batch_scoring.py"]
+
+  # An interactive shell in the same image, for poking at a bundle manifest or
+  # curling the service from inside the network when a request does not do what
+  # it should.
+  shell:
+    <<: *serving
+    command: ["bash"]
+    stdin_open: true
+    tty: true

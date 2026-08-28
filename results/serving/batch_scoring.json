@@ -1,0 +1,85 @@
+{
+  "input_path": "/Users/sanjithshanmugavel/Documents/AdRankBench/results/serving/batch_input.parquet",
+  "output_path": "/Users/sanjithshanmugavel/Documents/AdRankBench/results/serving/batch_scored.parquet",
+  "rows": 10000,
+  "chunks": 3,
+  "chunk_rows": 4096,
+  "wall_seconds": 5.4927,
+  "feature_seconds": 1.8419,
+  "model_seconds": 0.6001,
+  "rows_per_second": 1820.6,
+  "feature_share": 0.3353,
+  "backend": "openvino-cpu-fp32",
+  "mean_probability": 0.277105,
+  "id_column": "ad_id",
+  "hardware": {
+    "collected_at_utc": "2026-08-28T01:19:17+00:00",
+    "host": {
+      "cpu_model": "Apple M3 Pro",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "system": "Darwin",
+      "machine": "arm64",
+      "processor": "arm",
+      "logical_cores": 12
+    },
+    "python": {
+      "version": "3.12.7",
+      "implementation": "CPython",
+      "executable": "/opt/anaconda3/bin/python"
+    },
+    "libraries": {
+      "numpy": "2.5.2",
+      "torch": {
+        "version": "2.8.0",
+        "cuda_build_version": "not available",
+        "cudnn_version": "not available",
+        "cuda_available": false,
+        "mps_available": true,
+        "device_count": 0,
+        "device_names": []
+      },
+      "onnxruntime": {
+        "version": "1.22.0",
+        "available_providers": [
+          "CoreMLExecutionProvider",
+          "AzureExecutionProvider",
+          "CPUExecutionProvider"
+        ],
+        "device": "CPU"
+      },
+      "openvino": "2026.2.1-21919-ede283a88e3-releases/2026/2",
+      "tensorrt": {
+        "version": "not available",
+        "available": false,
+        "reason": "the tensorrt python package is not installed (No module named 'tensorrt')"
+      },
+      "pynvml": "not available"
+    },
+    "gpu": {
+      "source": "not available",
+      "index": 0,
+      "available": false,
+      "reason": "this host is macOS, where there is no NVIDIA driver and no cuda runtime, so every gpu measurement is unavailable by construction",
+      "name": "not available",
+      "driver_version": "not available",
+      "cuda_driver_version": "not available",
+      "total_memory_bytes": null,
+      "memory_bus_width_bits": null,
+      "max_memory_clock_mhz": null,
+      "max_sm_clock_mhz": null,
+      "compute_capability": "not available",
+      "power_limit_watts": null,
+      "peak_memory_bandwidth_gb_s": null
+    }
+  },
+  "measured_at_utc": "2026-08-28T01:20:07Z",
+  "backend_label": "OpenVINO (CPU, fp32)",
+  "lane": "batch",
+  "shared_with_online_lane": {
+    "bundle_dir": "/Users/sanjithshanmugavel/Documents/AdRankBench/results/serving/bundle",
+    "feature_pipeline_sha256": "8343e316be89aeb24105e90baf00b53c05ce14d605d28e551d1c900b38cb5614",
+    "checkpoint_sha256": "577510929e3db4e4e9c31e00295ce3b5adc8493e6c9d068950d483afe25bdd3b",
+    "onnx_sha256": "f5bd678c1f645e58e69b2bb5750baf16f6e935148de8103638f3d92874e6e3a6",
+    "note": "these fingerprints are the same ones /health reports, which is what makes the online and batch probabilities identical rather than merely similar"
+  }
+}

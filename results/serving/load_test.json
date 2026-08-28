@@ -1,0 +1,766 @@
+{
+  "measured_at_utc": "2026-08-28T01:43:05Z",
+  "label": "shared developer laptop, other workloads running concurrently",
+  "hardware_label": "Apple M3 Pro, 12 logical cores, OpenVINO (CPU, fp32)",
+  "hardware": {
+    "collected_at_utc": "2026-08-28T01:42:56+00:00",
+    "host": {
+      "cpu_model": "Apple M3 Pro",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "system": "Darwin",
+      "machine": "arm64",
+      "processor": "arm",
+      "logical_cores": 12
+    },
+    "python": {
+      "version": "3.12.7",
+      "implementation": "CPython",
+      "executable": "/opt/anaconda3/bin/python"
+    },
+    "libraries": {
+      "numpy": "2.5.2",
+      "torch": {
+        "version": "2.8.0",
+        "cuda_build_version": "not available",
+        "cudnn_version": "not available",
+        "cuda_available": false,
+        "mps_available": true,
+        "device_count": 0,
+        "device_names": []
+      },
+      "onnxruntime": {
+        "version": "1.22.0",
+        "available_providers": [
+          "CoreMLExecutionProvider",
+          "AzureExecutionProvider",
+          "CPUExecutionProvider"
+        ],
+        "device": "CPU"
+      },
+      "openvino": "2026.2.1-21919-ede283a88e3-releases/2026/2",
+      "tensorrt": {
+        "version": "not available",
+        "available": false,
+        "reason": "the tensorrt python package is not installed (No module named 'tensorrt')"
+      },
+      "pynvml": "not available"
+    },
+    "gpu": {
+      "source": "not available",
+      "index": 0,
+      "available": false,
+      "reason": "this host is macOS, where there is no NVIDIA driver and no cuda runtime, so every gpu measurement is unavailable by construction",
+      "name": "not available",
+      "driver_version": "not available",
+      "cuda_driver_version": "not available",
+      "total_memory_bytes": null,
+      "memory_bus_width_bits": null,
+      "max_memory_clock_mhz": null,
+      "max_sm_clock_mhz": null,
+      "compute_capability": "not available",
+      "power_limit_watts": null,
+      "peak_memory_bandwidth_gb_s": null
+    }
+  },
+  "logical_cores": 12,
+  "backend_key": "openvino-cpu-fp32",
+  "backend_label": "OpenVINO (CPU, fp32)",
+  "backend_probe": [
+    {
+      "key": "tensorrt-fp32",
+      "label": "TensorRT native engine (fp32)",
+      "runtime": "tensorrt",
+      "precision": "fp32",
+      "device": "cuda",
+      "lane": "gpu",
+      "available": false,
+      "note": "torch reports no cuda device on this host, so every gpu lane is unavailable",
+      "extra": {}
+    },
+    {
+      "key": "onnxruntime-cuda-fp32",
+      "label": "ONNX Runtime (CUDA provider, fp32)",
+      "runtime": "onnxruntime",
+      "precision": "fp32",
+      "device": "cuda",
+      "lane": "gpu",
+      "available": false,
+      "note": "this ONNX Runtime build has no CUDAExecutionProvider, it offers ['CoreMLExecutionProvider', 'AzureExecutionProvider', 'CPUExecutionProvider']. Install onnxruntime-gpu on a cuda host.",
+      "extra": {}
+    },
+    {
+      "key": "openvino-cpu-fp32",
+      "label": "OpenVINO (CPU, fp32)",
+      "runtime": "openvino",
+      "precision": "fp32",
+      "device": "cpu",
+      "lane": "cpu",
+      "available": true,
+      "note": "",
+      "extra": {
+        "device": "CPU"
+      }
+    }
+  ],
+  "thread_pool_size": 8,
+  "model_name": "DeepFM",
+  "bundle": {
+    "bundle_dir": "/Users/sanjithshanmugavel/Documents/AdRankBench/results/serving/bundle",
+    "bundle_version": 1,
+    "built_at_utc": "2026-08-28T00:47:04+00:00",
+    "model_name": "DeepFM",
+    "onnx_path": "/Users/sanjithshanmugavel/Documents/AdRankBench/results/deepfm.onnx",
+    "onnx_sha256": "f5bd678c1f645e58e69b2bb5750baf16f6e935148de8103638f3d92874e6e3a6",
+    "checkpoint_path": "/Users/sanjithshanmugavel/Documents/AdRankBench/results/DeepFM.pt",
+    "checkpoint_sha256": "577510929e3db4e4e9c31e00295ce3b5adc8493e6c9d068950d483afe25bdd3b",
+    "feature_pipeline_sha256": "8343e316be89aeb24105e90baf00b53c05ce14d605d28e551d1c900b38cb5614",
+    "feature_pipeline": {
+      "version": 1,
+      "hash_bucket_size": 10000,
+      "cross_bucket_size": 100000,
+      "min_count": 10,
+      "train_rows": 80000,
+      "count_entries": 27325,
+      "count_entries_pruned": 475,
+      "cross_pairs": [
+        "C1&C16",
+        "C1&C2",
+        "C1&C3",
+        "C1&C4",
+        "C16&C2",
+        "C16&C3",
+        "C16&C4",
+        "C2&C3",
+        "C2&C4",
+        "C3&C4"
+      ]
+    },
+    "calibration": {
+      "a": 0.7996111261157012,
+      "applied": true,
+      "b": -0.1016790171918677,
+      "fitted_on": "validation split, never the test split",
+      "method": "platt",
+      "reason": "platt scaling lowered validation expected calibration error from 0.0331 to 0.0117, so it is applied on the request path",
+      "val_ece_after": 0.01168606648903566,
+      "val_ece_before": 0.03305101386829868,
+      "val_rows": 10000
+    },
+    "data": {
+      "file_bytes": 0,
+      "file_mtime_utc": "",
+      "note": "no real Criteo file was present, so the bundle was fitted on the synthetic generator. Every probability this bundle serves is a synthetic data probability and is labeled as one.",
+      "path": "",
+      "rows_test": 10000,
+      "rows_total": 100000,
+      "rows_train": 80000,
+      "rows_val": 10000,
+      "sample_size": 100000,
+      "seed": 42,
+      "source": "synthetic",
+      "train_click_rate": 0.27121248841285706,
+      "val_click_rate": 0.27619999647140503
+    }
+  },
+  "generator": "closed loop",
+  "duration_seconds": 6.0,
+  "warmup_seconds": 2.0,
+  "concurrency_levels": [
+    1,
+    4,
+    16,
+    64,
+    256
+  ],
+  "candidate_sizes": [
+    1,
+    16,
+    64
+  ],
+  "service_workers": 1,
+  "load_average_at_start": [
+    63.81,
+    66.64,
+    61.76
+  ],
+  "load_average_at_end": [
+    92.25,
+    79.07,
+    67.85
+  ],
+  "cells": [
+    {
+      "concurrency": 1,
+      "n_candidates": 1,
+      "completed": 458,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.0296,
+      "throughput_rps": 75.95839636027648,
+      "throughput_ads_per_second": 75.95839636027648,
+      "latency_ms": {
+        "mean": 13.113834697185856,
+        "p50": 9.765332913957536,
+        "p95": 28.724418819183477,
+        "p99": 59.70206791302191,
+        "p999": 105.00872480880959,
+        "max": 106.74191603902727
+      },
+      "server_side_ms": {
+        "total_mean": 6.712526200873363,
+        "feature_mean": 5.658034716157205,
+        "model_mean": 1.0544936681222707
+      },
+      "achieved_concurrency": 0.9961058537319896,
+      "host_load_average": [
+        65.03,
+        66.84,
+        61.86
+      ]
+    },
+    {
+      "concurrency": 4,
+      "n_candidates": 1,
+      "completed": 365,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.0583,
+      "throughput_rps": 60.247458181285104,
+      "throughput_ads_per_second": 60.247458181285104,
+      "latency_ms": {
+        "mean": 65.92152853917382,
+        "p50": 42.45383304078132,
+        "p95": 190.105325030163,
+        "p99": 434.81500695925564,
+        "p999": 661.6373118236681,
+        "max": 692.6364159444347
+      },
+      "server_side_ms": {
+        "total_mean": 19.26159205479452,
+        "feature_mean": 12.816362191780822,
+        "model_mean": 6.445230684931507
+      },
+      "achieved_concurrency": 3.9716045339102677,
+      "host_load_average": [
+        69.35,
+        67.71,
+        62.2
+      ]
+    },
+    {
+      "concurrency": 16,
+      "n_candidates": 1,
+      "completed": 179,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 7.2491,
+      "throughput_rps": 24.69260125541341,
+      "throughput_ads_per_second": 24.69260125541341,
+      "latency_ms": {
+        "mean": 598.547210660633,
+        "p50": 499.4645839324221,
+        "p95": 1478.349591314327,
+        "p99": 1919.091802097391,
+        "p999": 2115.17674938054,
+        "max": 2126.11645902507
+      },
+      "server_side_ms": {
+        "total_mean": 40.508958659217875,
+        "feature_mean": 9.437548044692738,
+        "model_mean": 31.0714094972067
+      },
+      "achieved_concurrency": 14.779687605382941,
+      "host_load_average": [
+        70.49,
+        68.01,
+        62.37
+      ]
+    },
+    {
+      "concurrency": 64,
+      "n_candidates": 1,
+      "completed": 234,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 10.0006,
+      "throughput_rps": 23.39866783423597,
+      "throughput_ads_per_second": 23.39866783423597,
+      "latency_ms": {
+        "mean": 2323.81983566084,
+        "p50": 2140.856520505622,
+        "p95": 5172.415802243631,
+        "p99": 5342.986807579873,
+        "p999": 5376.164933513617,
+        "max": 5379.86845895648
+      },
+      "server_side_ms": {
+        "total_mean": 24.669350854700856,
+        "feature_mean": 6.019336324786325,
+        "model_mean": 18.65001923076923
+      },
+      "achieved_concurrency": 54.374288441236814,
+      "host_load_average": [
+        60.84,
+        66.02,
+        61.73
+      ]
+    },
+    {
+      "concurrency": 256,
+      "n_candidates": 1,
+      "completed": 374,
+      "errors": 1,
+      "error_rate": 0.0026666666666666666,
+      "error_examples": [
+        "ReadError "
+      ],
+      "wall_seconds": 10.1131,
+      "throughput_rps": 36.98188374668657,
+      "throughput_ads_per_second": 36.98188374668657,
+      "latency_ms": {
+        "mean": 5510.053357861147,
+        "p50": 5631.762333505321,
+        "p95": 7490.886723186122,
+        "p99": 7542.990153190913,
+        "p999": 7863.710604764413,
+        "max": 7910.604708944447
+      },
+      "server_side_ms": {
+        "total_mean": 44.079058021390374,
+        "feature_mean": 5.832112032085561,
+        "model_mean": 38.24694893048128
+      },
+      "achieved_concurrency": 203.7721527184609,
+      "host_load_average": [
+        64.2,
+        66.42,
+        61.97
+      ]
+    },
+    {
+      "concurrency": 1,
+      "n_candidates": 16,
+      "completed": 448,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.0051,
+      "throughput_rps": 74.60291485814821,
+      "throughput_ads_per_second": 1193.6466377303714,
+      "latency_ms": {
+        "mean": 13.34670399566156,
+        "p50": 11.367916536983103,
+        "p95": 26.962972909677763,
+        "p99": 49.69853866146863,
+        "p999": 67.19867241114918,
+        "max": 73.30262497998774
+      },
+      "server_side_ms": {
+        "total_mean": 6.837946428571429,
+        "feature_mean": 5.88846875,
+        "model_mean": 0.9494756696428571
+      },
+      "achieved_concurrency": 0.9957030218252458,
+      "host_load_average": [
+        67.01,
+        66.94,
+        62.2
+      ]
+    },
+    {
+      "concurrency": 4,
+      "n_candidates": 16,
+      "completed": 511,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.0187,
+      "throughput_rps": 84.90178018860662,
+      "throughput_ads_per_second": 1358.428483017706,
+      "latency_ms": {
+        "mean": 46.98231314566832,
+        "p50": 41.876833071000874,
+        "p95": 88.42633350286633,
+        "p99": 136.8638419779017,
+        "p999": 165.59236997854939,
+        "max": 168.91400003805757
+      },
+      "server_side_ms": {
+        "total_mean": 12.705855968688844,
+        "feature_mean": 6.63926614481409,
+        "model_mean": 6.066590019569472
+      },
+      "achieved_concurrency": 3.9888820234458153,
+      "host_load_average": [
+        71.86,
+        67.96,
+        62.62
+      ]
+    },
+    {
+      "concurrency": 16,
+      "n_candidates": 16,
+      "completed": 326,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.3164,
+      "throughput_rps": 51.611830067067814,
+      "throughput_ads_per_second": 825.789281073085,
+      "latency_ms": {
+        "mean": 295.8044626934317,
+        "p50": 212.99914602423087,
+        "p95": 795.191594021162,
+        "p99": 1059.7872184298467,
+        "p999": 1507.8271437581886,
+        "max": 1576.3801250141114
+      },
+      "server_side_ms": {
+        "total_mean": 25.59235736196319,
+        "feature_mean": 7.87921963190184,
+        "model_mean": 17.713134969325154
+      },
+      "achieved_concurrency": 15.267009661613697,
+      "host_load_average": [
+        83.27,
+        70.54,
+        63.6
+      ]
+    },
+    {
+      "concurrency": 64,
+      "n_candidates": 16,
+      "completed": 190,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 8.689,
+      "throughput_rps": 21.866826929367157,
+      "throughput_ads_per_second": 349.8692308698745,
+      "latency_ms": {
+        "mean": 2530.9485052503937,
+        "p50": 2518.609334016219,
+        "p95": 4984.314258443192,
+        "p99": 5327.531974964077,
+        "p999": 5368.270935953595,
+        "max": 5373.539499938488
+      },
+      "server_side_ms": {
+        "total_mean": 26.862604736842105,
+        "feature_mean": 6.526478421052632,
+        "model_mean": 20.336122105263158
+      },
+      "achieved_concurrency": 55.34381293145086,
+      "host_load_average": [
+        92.4,
+        72.94,
+        64.53
+      ]
+    },
+    {
+      "concurrency": 256,
+      "n_candidates": 16,
+      "completed": 256,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 12.3694,
+      "throughput_rps": 20.696201907861365,
+      "throughput_ads_per_second": 331.13923052578184,
+      "latency_ms": {
+        "mean": 10369.825740257511,
+        "p50": 11631.48539600661,
+        "p95": 12128.695146064274,
+        "p99": 12223.61179010477,
+        "p999": 12285.486783660017,
+        "max": 12291.953042033128
+      },
+      "server_side_ms": {
+        "total_mean": 57.097312890625,
+        "feature_mean": 6.921448828125,
+        "model_mean": 50.175865625
+      },
+      "achieved_concurrency": 214.61600726970738,
+      "host_load_average": [
+        100.87,
+        75.8,
+        65.7
+      ]
+    },
+    {
+      "concurrency": 1,
+      "n_candidates": 64,
+      "completed": 132,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.0167,
+      "throughput_rps": 21.939101930660307,
+      "throughput_ads_per_second": 1404.1025235622596,
+      "latency_ms": {
+        "mean": 45.30112117539499,
+        "p50": 36.113520502112806,
+        "p95": 103.83776265662162,
+        "p99": 145.4228137969039,
+        "p999": 154.98822526249592,
+        "max": 155.99604102317244
+      },
+      "server_side_ms": {
+        "total_mean": 24.74146818181818,
+        "feature_mean": 19.350978787878788,
+        "model_mean": 5.3904893939393945
+      },
+      "achieved_concurrency": 0.9938659150401847,
+      "host_load_average": [
+        97.93,
+        76.33,
+        66.06
+      ]
+    },
+    {
+      "concurrency": 4,
+      "n_candidates": 64,
+      "completed": 158,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.0265,
+      "throughput_rps": 26.217397088946733,
+      "throughput_ads_per_second": 1677.913413692591,
+      "latency_ms": {
+        "mean": 149.82146910860357,
+        "p50": 119.44504204439,
+        "p95": 267.0761937450156,
+        "p99": 842.6566769951023,
+        "p999": 847.6539905820974,
+        "max": 848.5573750222102
+      },
+      "server_side_ms": {
+        "total_mean": 60.37582974683544,
+        "feature_mean": 42.15351518987342,
+        "model_mean": 18.222314556962026
+      },
+      "achieved_concurrency": 3.927928948069626,
+      "host_load_average": [
+        92.83,
+        75.98,
+        66.06
+      ]
+    },
+    {
+      "concurrency": 16,
+      "n_candidates": 64,
+      "completed": 204,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 6.1933,
+      "throughput_rps": 32.939004471805525,
+      "throughput_ads_per_second": 2108.0962861955536,
+      "latency_ms": {
+        "mean": 477.915954251098,
+        "p50": 386.386375001166,
+        "p95": 1096.1051732010671,
+        "p99": 1181.6106423502788,
+        "p999": 1237.5149431892212,
+        "max": 1242.9445419693366
+      },
+      "server_side_ms": {
+        "total_mean": 100.84823431372548,
+        "feature_mean": 38.2746681372549,
+        "model_mean": 62.573567156862744
+      },
+      "achieved_concurrency": 15.742075754224123,
+      "host_load_average": [
+        94.76,
+        76.66,
+        66.36
+      ]
+    },
+    {
+      "concurrency": 64,
+      "n_candidates": 64,
+      "completed": 148,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 7.0128,
+      "throughput_rps": 21.10441620265975,
+      "throughput_ads_per_second": 1350.682636970224,
+      "latency_ms": {
+        "mean": 2379.6003766647364,
+        "p50": 1780.9208540129475,
+        "p95": 5278.47279952839,
+        "p99": 5543.560971261468,
+        "p999": 5604.426564228837,
+        "max": 5611.424333998002
+      },
+      "server_side_ms": {
+        "total_mean": 70.82205472972973,
+        "feature_mean": 15.094381756756757,
+        "model_mean": 55.72767635135135
+      },
+      "achieved_concurrency": 50.220076745138506,
+      "host_load_average": [
+        95.62,
+        77.42,
+        66.74
+      ]
+    },
+    {
+      "concurrency": 256,
+      "n_candidates": 64,
+      "completed": 256,
+      "errors": 0,
+      "error_rate": 0.0,
+      "error_examples": [],
+      "wall_seconds": 17.4312,
+      "throughput_rps": 14.686301426502563,
+      "throughput_ads_per_second": 939.923291296164,
+      "latency_ms": {
+        "mean": 14281.500909840815,
+        "p50": 13950.25039598113,
+        "p95": 16548.23214552016,
+        "p99": 17284.6391502826,
+        "p999": 17362.84074188792,
+        "max": 17376.091583049856
+      },
+      "server_side_ms": {
+        "total_mean": 95.9252765625,
+        "feature_mean": 22.55282734375,
+        "model_mean": 73.372449609375
+      },
+      "achieved_concurrency": 209.74242718479283,
+      "host_load_average": [
+        95.55,
+        78.92,
+        67.6
+      ]
+    }
+  ],
+  "knees": {
+    "1": {
+      "knee_concurrency": 1,
+      "reached": true,
+      "note": "past 1 concurrent clients the p99 grows faster than the throughput does, so additional load buys queue depth rather than work",
+      "steps": [
+        {
+          "from_concurrency": 1,
+          "to_concurrency": 4,
+          "throughput_gain": 0.79316390377078,
+          "p99_cost": 7.283081175558679,
+          "efficiency": 0.10890499290774926
+        },
+        {
+          "from_concurrency": 4,
+          "to_concurrency": 16,
+          "throughput_gain": 0.40985299630588845,
+          "p99_cost": 4.413582262300389,
+          "efficiency": 0.09286175536066031
+        },
+        {
+          "from_concurrency": 16,
+          "to_concurrency": 64,
+          "throughput_gain": 0.9475983349103906,
+          "p99_cost": 2.7841225738865014,
+          "efficiency": 0.34035797985272925
+        },
+        {
+          "from_concurrency": 64,
+          "to_concurrency": 256,
+          "throughput_gain": 1.5805123611599887,
+          "p99_cost": 1.4117553392589304,
+          "efficiency": 1.119537016937824
+        }
+      ]
+    },
+    "16": {
+      "knee_concurrency": 1,
+      "reached": true,
+      "note": "past 1 concurrent clients the p99 grows faster than the throughput does, so additional load buys queue depth rather than work",
+      "steps": [
+        {
+          "from_concurrency": 1,
+          "to_concurrency": 4,
+          "throughput_gain": 1.1380491010309841,
+          "p99_cost": 2.753880610256504,
+          "efficiency": 0.41325288278382666
+        },
+        {
+          "from_concurrency": 4,
+          "to_concurrency": 16,
+          "throughput_gain": 0.6079004462852694,
+          "p99_cost": 7.743368906748665,
+          "efficiency": 0.07850593890153666
+        },
+        {
+          "from_concurrency": 16,
+          "to_concurrency": 64,
+          "throughput_gain": 0.42367858107243944,
+          "p99_cost": 5.026982664366542,
+          "efficiency": 0.08428089161231032
+        },
+        {
+          "from_concurrency": 64,
+          "to_concurrency": 256,
+          "throughput_gain": 0.9464657114959079,
+          "p99_cost": 2.294422980011714,
+          "efficiency": 0.4125070746506713
+        }
+      ]
+    },
+    "64": {
+      "knee_concurrency": 1,
+      "reached": true,
+      "note": "past 1 concurrent clients the p99 grows faster than the throughput does, so additional load buys queue depth rather than work",
+      "steps": [
+        {
+          "from_concurrency": 1,
+          "to_concurrency": 4,
+          "throughput_gain": 1.195007761566914,
+          "p99_cost": 5.794528760610755,
+          "efficiency": 0.20623036159388353
+        },
+        {
+          "from_concurrency": 4,
+          "to_concurrency": 16,
+          "throughput_gain": 1.256379661186603,
+          "p99_cost": 1.4022444426167486,
+          "efficiency": 0.8959776362829114
+        },
+        {
+          "from_concurrency": 16,
+          "to_concurrency": 64,
+          "throughput_gain": 0.6407120233619776,
+          "p99_cost": 4.691529318181382,
+          "efficiency": 0.13656783959102325
+        },
+        {
+          "from_concurrency": 64,
+          "to_concurrency": 256,
+          "throughput_gain": 0.695887594590353,
+          "p99_cost": 3.1179668158947633,
+          "efficiency": 0.22318633766172846
+        }
+      ]
+    }
+  },
+  "slo": {
+    "slo_ms": 25.0,
+    "met": false,
+    "max_sustainable_rps": null,
+    "at_concurrency": null,
+    "note": "no cell in this sweep held the p99 under the budget. The closest was 49.7 ms at concurrency 1 with 16 candidates"
+  },
+  "host_was_busy": true,
+  "coordinated_omission": "this is a closed loop generator, so a slow response suppresses the requests that would have been sent during it and the reported tail is a floor on the real tail rather than an estimate of it",
+  "charts": {
+    "Throughput against concurrency": "results/serving/load_test_throughput.png",
+    "Tail latency against concurrency": "results/serving/load_test_p99.png",
+    "Latency distribution tail": "results/serving/load_test_latency_distribution.png"
+  }
+}

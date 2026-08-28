@@ -1,0 +1,151 @@
+# syntax=docker/dockerfile:1.7
+
+# AdRankBench CPU serving image.
+#
+# This is the online lane. It builds an image that loads one serving bundle and
+# answers /score, /health, and /metrics. It is the counterpart to
+# docker/Dockerfile.tensorrt, which builds the GPU benchmarking image, and it
+# follows the same rule that image follows. The base tag is pinned exactly
+# rather than floated, because a serving latency number is only reproducible if
+# the interpreter, the runtime libraries, and the kernels underneath it are the
+# same on two runs. Floating the tag would change all three under the service
+# and make two runs of the same load test produce numbers that cannot be
+# compared.
+#
+# The pin here is a plain Debian based Python image rather than an NVIDIA one,
+# because this lane has no CUDA in it at all. Everything it runs is CPU work,
+# which is also where a large fraction of real ad serving actually runs, since
+# the economics of a serving fleet are about queries per second per dollar
+# rather than about the lowest achievable latency on one accelerator.
+#
+#   python:3.11-slim-bookworm
+#     Debian      12 bookworm
+#     Python      3.11
+#     Package mgr apt, and pip is not externally managed in this image, so a
+#                 plain pip install works with no --break-system-packages flag.
+#                 Some newer base images do mark their interpreter externally
+#                 managed under PEP 668, and switching to one of those means
+#                 adding that flag or building a virtual environment.
+#
+# GPU SERVING. To serve on a CUDA host, change the base to the TensorRT image
+# the benchmark lane already pins and install the GPU extras on top.
+#
+#   ARG BASE_IMAGE=nvcr.io/nvidia/tensorrt:25.01-py3
+#
+# and then, in the dependency layer below, add requirements-gpu.txt after
+# requirements.txt and uninstall the CPU onnxruntime first, exactly the way
+# docker/Dockerfile.tensorrt does it, because onnxruntime and onnxruntime-gpu
+# install the same top level module and leaving both on disk gives a session
+# that advertises CUDA and then quietly runs on the CPU. Nothing in the service
+# itself changes. The backend probe in src/serving/runtime.py asks the same
+# registry the benchmark sweeps, so on a CUDA host it selects the TensorRT or
+# the ONNX Runtime CUDA lane on its own and reports on /health which one it
+# actually got. Run the container with --gpus all and mount results/ so a
+# prebuilt engine is visible, since an engine is tied to the GPU architecture
+# and the TensorRT version that built it and cannot be baked into a portable
+# image.
+ARG BASE_IMAGE=python:3.11-slim-bookworm
+FROM ${BASE_IMAGE}
+
+LABEL org.opencontainers.image.title="AdRankBench CPU serving"
+LABEL org.opencontainers.image.description="FastAPI ranking service for the AdRankBench DeepFM ranker, CPU lane"
+LABEL org.opencontainers.image.source="https://github.com/Sanjith-Shan/AdRankBench"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Fail the build on the first bad command in a pipeline rather than on the last.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    MPLBACKEND=Agg \
+    PYTHONPATH=/workspace/adrankbench
+
+# Serving defaults. Every one of these is read by src/serving/entrypoint.py and
+# every one is overridable at run time, so a deployment is a set of environment
+# variables rather than an edited image.
+ENV ADRANK_BUNDLE_DIR=/workspace/adrankbench/results/serving/bundle \
+    ADRANK_ARTIFACT_DIR=/workspace/adrankbench/results \
+    ADRANK_MODEL=deepfm \
+    ADRANK_THREADS=8 \
+    ADRANK_MAX_CANDIDATES=4096 \
+    ADRANK_WARMUP=1 \
+    ADRANK_PORT=8000
+
+WORKDIR /workspace/adrankbench
+
+# One apt layer. libgomp is what the OpenVINO and ONNX Runtime CPU kernels link
+# against, and OpenVINO is the backend the probe selects on a CPU host, so this
+# is a runtime dependency of the fast path rather than a build convenience.
+# curl is here for the container healthcheck at the bottom of this file.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dependencies go in their own layer, ahead of the source copy, so editing the
+# service does not reinstall the wheels. torch alone is several hundred
+# megabytes and it is the reason this ordering matters.
+COPY requirements.txt requirements-serving.txt ./
+
+# The CPU build of torch, taken from the CPU wheel index rather than from PyPI.
+# The default PyPI torch wheel for Linux carries the CUDA runtime libraries
+# inside it, which adds well over a gigabyte to an image that will never touch a
+# GPU. Asking for the cpu index first means the requirements.txt line that
+# follows sees the requirement already satisfied and does not pull the CUDA
+# build on top of it.
+ARG TORCH_VERSION=2.7.1
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python -m pip install --upgrade pip \
+    && python -m pip install --index-url "${TORCH_INDEX}" "torch==${TORCH_VERSION}" \
+    && python -m pip install -r requirements.txt \
+    && python -m pip install -r requirements-serving.txt
+
+# Source last so a code change rebuilds one small layer.
+COPY . .
+
+# data and results are the two mount points. They are created here so a run with
+# no bind mount still writes somewhere sensible instead of failing, and a run
+# with a bind mount just covers them.
+RUN mkdir -p /workspace/adrankbench/data /workspace/adrankbench/results/serving
+
+# A build time smoke check of the import surface the service depends on. This
+# catches a broken install at build time rather than at the first request. It
+# deliberately does not load a bundle, since the bundle arrives on a mount and
+# is not part of the image.
+RUN python - <<'PY'
+import fastapi
+import onnxruntime
+import openvino
+import torch
+import uvicorn
+
+from src.serving.runtime import PREFERENCE_ORDER
+
+print("torch", torch.__version__)
+print("onnxruntime", onnxruntime.__version__)
+print("onnxruntime providers", onnxruntime.get_available_providers())
+print("openvino", openvino.__version__)
+print("fastapi", fastapi.__version__)
+print("uvicorn", uvicorn.__version__)
+print("backend preference order", PREFERENCE_ORDER)
+PY
+
+EXPOSE 8000
+
+# The healthcheck hits the real health endpoint rather than the port, because a
+# process that is listening and cannot rank is the failure mode that matters. A
+# generous start period covers the case where the container has to build its
+# bundle on first start, which trains a checkpoint when none is mounted.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=600s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${ADRANK_PORT}/health" > /dev/null || exit 1
+
+# Bind to every interface, because inside a container 127.0.0.1 is only
+# reachable from inside that container and the published port would answer
+# nothing. The thread pool size is the queueing parameter of the service and it
+# is passed through from the environment so a deployment can tune it without a
+# rebuild.
+CMD ["sh", "-c", "python scripts/serve.py --host 0.0.0.0 --port ${ADRANK_PORT} --threads ${ADRANK_THREADS} --max-candidates ${ADRANK_MAX_CANDIDATES}"]
